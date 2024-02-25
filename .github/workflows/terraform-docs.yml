@@ -65,6 +65,7 @@ jobs:
           filters: |
             readme:
               - "README.md"
+          token: ${{ steps.app_token.outputs.token }}
 
       - name: Sign and commit changes
         if: steps.changes.outputs.readme == 'true'
