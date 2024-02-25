@@ -1,6 +1,5 @@
 ---
 name: terraform-lint
-description: This GitHub workflow checks the terraform code to make sure it is properly formatted and passes validation.
 
 on:
   workflow_call:
