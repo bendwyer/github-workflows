@@ -1,0 +1,55 @@
+name: labels
+description: This GitHub workflow applies labels based on the pull request title. Depends on a release-drafter/release-drafter configuration.
+
+on:
+  workflow_call:
+    inputs:
+      gh_app_id:
+        description: GitHub App ID
+        required: true
+        type: string
+    secrets:
+      gh_app_private_key:
+        description: GitHub App private key
+        required: true
+
+jobs:
+  labels:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App token
+        uses: actions/create-github-app-token@v1
+        id: app_token
+        with:
+          app-id: ${{ inputs.gh_app_id }}
+          private-key: ${{ secrets.gh_app_private_key }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Apply category label to PR
+        uses: release-drafter/release-drafter@v5
+        with:
+          disable-autolabeler: false
+          disable-releaser: true
+        env:
+          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+        continue-on-error: true
+
+      - name: Check PR category label
+        uses: mheap/github-action-required-labels@v5
+        with:
+          mode: minimum
+          count: 1
+          add_comment: true
+          exit_type: failure
+          labels: |
+            major
+            breaking
+            minor
+            feature
+            enhancement
+            deprecated
+            bug
+            patch
+            skip-changelog

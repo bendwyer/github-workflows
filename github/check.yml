@@ -1,0 +1,21 @@
+---
+name: check
+description: This GitHub workflow checks whether dependency jobs have passed or failed. Useful when combined with required checks branch protection rule.
+
+on:
+  workflow_call:
+    inputs:
+      allowed_skips:
+        description: "Job names that are allowed to be skipped and not affect the outcome, as a comma-separated list."
+        required: true
+        type: string
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check status of needed jobs and pass/fail
+        uses: re-actors/alls-green@v1.2.2
+        with:
+          allowed-skips: ${{ inputs.allowed_skips }}
+          jobs: ${{ toJson(needs) }}

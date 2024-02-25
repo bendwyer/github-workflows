@@ -1,0 +1,109 @@
+---
+name: terraform-docs
+description: This GitHub workflow generates terraform-docs. Works best when used with the on.pull_request trigger.
+
+on:
+  workflow_call:
+    inputs:
+      gh_app_id:
+        description: GitHub App ID
+        required: true
+        type: string
+    secrets:
+      gh_app_private_key:
+        description: GitHub App private key
+        required: true
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App token
+        uses: actions/create-github-app-token@v1
+        id: app_token
+        with:
+          app-id: ${{ inputs.gh_app_id }}
+          private-key: ${{ secrets.gh_app_private_key }}
+
+      - name: Add Homebrew to $PATH
+        run: echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
+
+      - name: Install terraform-docs
+        run: |
+          brew install terraform-docs
+        shell: bash
+
+      - name: Test terraform-docs installation
+        run: |
+          terraform-docs --version
+        shell: bash
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Render terraform-docs
+        run: |
+          terraform-docs -c .terraform-docs.yml .
+        shell: bash
+
+      - name: Detect README changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            readme:
+              - "README.md"
+
+      - name: Sign and commit changes
+        if: steps.changes.outputs.readme == 'true'
+        env:
+          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+          FILE_TO_COMMIT: README.md
+          DESTINATION_BRANCH: ${{ github.head_ref }}
+        run: |
+          export MESSAGE="terraform-docs: README.md updated"
+          export SHA=$( git rev-parse $DESTINATION_BRANCH:$FILE_TO_COMMIT )
+          gh api --method PUT /repos/:owner/:repo/contents/$FILE_TO_COMMIT \
+            --field message="$MESSAGE" \
+            --field content=@<( base64 -i $FILE_TO_COMMIT ) \
+            --field branch="$DESTINATION_BRANCH" \
+            --field sha="$SHA"
+        shell: bash
+
+      - name: Pull changes
+        if: steps.changes.outputs.readme == 'true'
+        run: |
+          git pull
+        shell: bash
+
+      - name: Calculate diff
+        if: steps.changes.outputs.readme == 'true'
+        id: diff
+        run: |
+          delimiter="$(openssl rand -hex 8)"
+          {
+            echo "diff<<${delimiter}"
+            git --no-pager diff --histogram ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.ref }} -- README.md
+            echo "${delimiter}"
+          } >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Create terraform-docs comment
+        if: steps.changes.outputs.readme == 'true'
+        id: comment
+        uses: peter-evans/create-or-update-comment@v3
+        with:
+          issue-number: ${{ github.event.number }}
+          body: |
+            ## README.md changes
+
+            <details><summary>output</summary>
+
+            ```diff
+            ${{ steps.diff.outputs.diff }}
+            ```
+
+            </details>
