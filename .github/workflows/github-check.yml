@@ -5,7 +5,6 @@ on:
   workflow_call:
     inputs:
       allowed_skips:
-        default: ""
         description: "Job names that are allowed to be skipped and not affect the outcome, as a comma-separated list."
         required: false
         type: string
