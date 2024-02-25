@@ -8,6 +8,10 @@ on:
         description: "Job names that are allowed to be skipped and not affect the outcome, as a comma-separated list."
         required: false
         type: string
+      jobs:
+        description: "Must be exactly 'toJSON(needs)' in the calling workflow."
+        required: true
+        type: string
 
 jobs:
   check:
@@ -17,4 +21,4 @@ jobs:
         uses: re-actors/alls-green@v1.2.2
         with:
           allowed-skips: ${{ inputs.allowed_skips }}
-          jobs: ${{ toJson(needs) }}
+          jobs: ${{ inputs.jobs }}
