@@ -1,0 +1,90 @@
+---
+name: terraform-lint
+description: This GitHub workflow checks the terraform code to make sure it is properly formatted and passes validation.
+
+on:
+  workflow_call:
+    inputs:
+      gh_app_id:
+        description: GitHub App ID
+        required: true
+        type: string
+    secrets:
+      gh_app_private_key:
+        description: GitHub App private key
+        required: true
+
+env:
+  TF_IN_AUTOMATION: true
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App token
+        uses: actions/create-github-app-token@v1
+        id: app_token
+        with:
+          app-id: ${{ inputs.gh_app_id }}
+          private-key: ${{ secrets.gh_app_private_key }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app_token.outputs.token }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: terraform fmt check
+        id: fmt-check
+        continue-on-error: true
+        run: |
+          terraform fmt \
+            -check \
+            -recursive \
+            -diff \
+            -no-color
+        shell: bash
+
+      - name: terraform fmt
+        if: steps.fmt-check.outputs.exitcode != '0'
+        id: fmt
+        continue-on-error: true
+        run: |
+          terraform fmt \
+            -check \
+            -recursive \
+            -no-color
+        shell: bash
+
+      - name: Commit changes
+        if: steps.fmt-check.outputs.exitcode != '0'
+        uses: stefanzewifel/git-auto-commit-action@v4
+        with:
+          commit_message: "terraform fmt: Automatic change applied."
+
+  validate:
+    runs-on: ubuntu-latest
+    needs:
+      - fmt
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: terraform init
+        run: |
+          terraform init \
+            -no-color \
+            -input=false \
+            -backend=false
+        shell: bash
+
+      - name: terraform validate
+        run: |
+          terraform validate \
+            -no-color
+        shell: bash
