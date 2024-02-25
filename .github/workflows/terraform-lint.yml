@@ -59,7 +59,7 @@ jobs:
 
       - name: Commit changes
         if: steps.fmt-check.outputs.exitcode != '0'
-        uses: stefanzewifel/git-auto-commit-action@v4
+        uses: stefanzweifel/git-auto-commit-action@v4
         with:
           commit_message: "terraform fmt: Automatic change applied."
 
