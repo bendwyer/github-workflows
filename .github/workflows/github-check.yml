@@ -1,12 +1,11 @@
 ---
 name: check
-description: This GitHub workflow checks whether dependency jobs have passed or failed. Useful when combined with required checks branch protection rule.
 
 on:
   workflow_call:
     inputs:
       allowed_skips:
-        default: []
+        default: ""
         description: "Job names that are allowed to be skipped and not affect the outcome, as a comma-separated list."
         required: false
         type: string

@@ -1,6 +1,5 @@
 ---
 name: terraform-docs
-description: This GitHub workflow generates terraform-docs. Works best when used with the on.pull_request trigger.
 
 on:
   workflow_call:

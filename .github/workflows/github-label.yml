@@ -1,5 +1,4 @@
 name: label
-description: This GitHub workflow applies a label based on the pull request title. Depends on a release-drafter/release-drafter configuration.
 
 on:
   workflow_call:

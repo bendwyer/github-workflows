@@ -1,6 +1,5 @@
 ---
 name: prepare-release
-description: This GitHub workflow creates/updates a draft release.
 
 on:
   workflow_call:
