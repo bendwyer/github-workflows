@@ -62,3 +62,4 @@ jobs:
             bug
             patch
             skip-changelog
+          token: ${{ steps.app_token.outputs.token }}
