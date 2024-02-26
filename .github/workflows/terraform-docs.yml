@@ -59,7 +59,7 @@ jobs:
         shell: bash
 
       - name: Detect README changes
-        uses: dorny/paths-filter@v2
+        uses: dorny/paths-filter@v3
         id: changes
         with:
           base: HEAD
