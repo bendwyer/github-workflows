@@ -1,0 +1,81 @@
+---
+name: terraform-docs
+
+on:
+  workflow_call:
+    inputs:
+      gh_app_id:
+        description: GitHub App ID
+        required: true
+        type: string
+      owner:
+        description: GitHub App installation owner. Defaults to repository owner. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped to only the current repository.
+        required: false
+        type: string
+      repositories:
+        description: Comma separated list of repositories to grant access to. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped to only the current repository.
+        required: false
+        type: string
+    secrets:
+      gh_app_private_key:
+        description: GitHub App private key
+        required: true
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App token
+        uses: actions/create-github-app-token@v1
+        id: app_token
+        with:
+          app-id: ${{ inputs.gh_app_id }}
+          private-key: ${{ secrets.gh_app_private_key }}
+          owner: ${{ inputs.owner }}
+          repositories: ${{ inputs.repositories }}
+
+      - name: Add Homebrew to $PATH
+        run: echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
+
+      - name: Install terraform-docs
+        run: |
+          brew install terraform-docs
+        shell: bash
+
+      - name: Test terraform-docs installation
+        run: |
+          terraform-docs --version
+        shell: bash
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Render terraform-docs
+        run: |
+          terraform-docs -c .terraform-docs.yml .
+        shell: bash
+
+      - name: Detect README changes
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          base: HEAD
+          filters: |
+            readme:
+              - "README.md"
+          token: ${{ steps.app_token.outputs.token }}
+
+      # https://www.zufallsheld.de/2023/12/11/til-how-to-create-github-files-via-api/
+      # https://gist.github.com/swinton/03e84635b45c78353b1f71e41007fc7c
+      - name: Sign and commit README changes
+        if: steps.changes.outputs.readme == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          BLOB_SHA="$(gh api --method GET -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/contents/${{ inputs.readme_file_name }}?ref=${{ github.head_ref }} -q .sha)"
+          MESSAGE="docs: Automated README update"
+          gh api --method PUT -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/contents/${{ inputs.readme_file_name }} --field message="$MESSAGE" --field content=@<(base64 -i ${{ inputs.readme_file_name }}) --field branch="${{ github.head_ref }}" --field sha="$BLOB_SHA"
+        shell: bash

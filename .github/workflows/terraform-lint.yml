@@ -1,0 +1,99 @@
+---
+name: terraform-lint
+
+on:
+  workflow_call:
+    inputs:
+      gh_app_id:
+        description: GitHub App ID
+        required: true
+        type: string
+      owner:
+        description: GitHub App installation owner. Defaults to repository owner. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped to only the current repository.
+        required: false
+        type: string
+      repositories:
+        description: Comma separated list of repositories to grant access to. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped to only the current repository.
+        required: false
+        type: string
+    secrets:
+      gh_app_private_key:
+        description: GitHub App private key
+        required: true
+
+env:
+  TF_IN_AUTOMATION: true
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App token
+        uses: actions/create-github-app-token@v1
+        id: app_token
+        with:
+          app-id: ${{ inputs.gh_app_id }}
+          private-key: ${{ secrets.gh_app_private_key }}
+          owner: ${{ inputs.owner }}
+          repositories: ${{ inputs.repositories }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app_token.outputs.token }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: terraform fmt check
+        id: fmt-check
+        continue-on-error: true
+        run: |
+          terraform fmt \
+            -check \
+            -recursive \
+            -diff \
+            -no-color
+        shell: bash
+
+      - name: terraform fmt
+        if: steps.fmt-check.outputs.exitcode != '0'
+        id: fmt
+        continue-on-error: true
+        run: |
+          terraform fmt \
+            -check \
+            -recursive \
+            -no-color
+        shell: bash
+
+      - name: Commit changes
+        if: steps.fmt-check.outputs.exitcode != '0'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "terraform fmt: Automatic change applied."
+
+  validate:
+    runs-on: ubuntu-latest
+    needs:
+      - fmt
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: terraform init
+        run: |
+          terraform init \
+            -no-color \
+            -input=false \
+            -backend=false
+        shell: bash
+
+      - name: terraform validate
+        run: |
+          terraform validate \
+            -no-color
+        shell: bash

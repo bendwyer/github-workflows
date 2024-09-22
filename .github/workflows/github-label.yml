@@ -1,0 +1,65 @@
+name: label
+
+on:
+  workflow_call:
+    inputs:
+      gh_app_id:
+        description: GitHub App ID
+        required: true
+        type: string
+      owner:
+        description: GitHub App installation owner. Defaults to repository owner. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped to only the current repository.
+        required: false
+        type: string
+      repositories:
+        description: Comma separated list of repositories to grant access to. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped to only the current repository.
+        required: false
+        type: string
+    secrets:
+      gh_app_private_key:
+        description: GitHub App private key
+        required: true
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App token
+        uses: actions/create-github-app-token@v1
+        id: app_token
+        with:
+          app-id: ${{ inputs.gh_app_id }}
+          private-key: ${{ secrets.gh_app_private_key }}
+          owner: ${{ inputs.owner }}
+          repositories: ${{ inputs.repositories }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Apply category label to PR
+        uses: release-drafter/release-drafter@v6
+        with:
+          disable-autolabeler: false
+          disable-releaser: true
+        env:
+          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+        continue-on-error: true
+
+      - name: Check PR category label
+        uses: mheap/github-action-required-labels@v5
+        with:
+          mode: minimum
+          count: 1
+          add_comment: true
+          exit_type: failure
+          labels: |
+            major
+            breaking
+            minor
+            feature
+            enhancement
+            deprecated
+            bug
+            patch
+            skip-changelog
+          token: ${{ steps.app_token.outputs.token }}

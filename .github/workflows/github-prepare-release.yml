@@ -1,0 +1,53 @@
+---
+name: prepare-release
+
+on:
+  workflow_call:
+    inputs:
+      gh_app_id:
+        description: GitHub App ID
+        required: true
+        type: string
+      owner:
+        description: GitHub App installation owner. Defaults to repository owner. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped to only the current repository.
+        required: false
+        type: string
+      repositories:
+        description: Comma separated list of repositories to grant access to. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped to only the current repository.
+        required: false
+        type: string
+    secrets:
+      gh_app_private_key:
+        description: GitHub App private key
+        required: true
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App token
+        uses: actions/create-github-app-token@v1
+        id: app_token
+        with:
+          app-id: ${{ inputs.gh_app_id }}
+          private-key: ${{ secrets.gh_app_private_key }}
+          owner: ${{ inputs.owner }}
+          repositories: ${{ inputs.repositories }}
+
+      - name: Get latest tag (draft or release)
+        run: |
+          echo "DETECTED_VERSION=$(gh api repos/${{ github.repository }}/releases | jq -r '.[0].tag_name')" >> "$GITHUB_ENV"
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+
+      - name: Update release draft
+        id: draft
+        uses: release-drafter/release-drafter@v6
+        with:
+          commitish: main
+          disable-autolabeler: true
+          tag: ${{ env.DETECTED_VERSION < '1.0.0' && '1.0.0' || '' }}
+          version: ${{ env.DETECTED_VERSION }} < '1.0.0' && '1.0.0' || '' }}
+        env:
+          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
