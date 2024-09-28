@@ -1,0 +1,69 @@
+name: hcp-terraform-apply
+
+on:
+  workflow_call:
+    inputs:
+      hcp_terraform_organization:
+        description: Name of existing HCP Terraform organization.
+        required: true
+        type: string
+      hcp_terraform_config_directory:
+        description: Path (relative to repository root) where Terraform files are located
+        required: false
+        default: ./terraform
+        type: string
+      hcp_terraform_log_level:
+        description: Debugging log level options. One of OFF, ERROR, INFO, DEBUG.
+        required: false
+        default: OFF
+        type: string
+      hcp_terraform_max_timeout:
+        description: Max wait timeout to wait for actions to reach desired or errored state. For example, 1h30 OR 30m.
+        required: false
+        default: 1h
+        type: string
+      hcp_terraform_workspace:
+        description: Name of existing HCP Terraform workspace.
+        required: true
+        type: string
+    secrets:
+      hcp_terraform_api_token:
+        description: HCP Terraform API token.
+        required: true
+
+env:
+  TF_CLOUD_ORGANIZATION: ${{ inputs.hcp_terraform_organization }}
+  TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
+  TF_WORKSPACE: ${{ inputs.hcp_terraform_workspace }}
+  CONFIG_DIRECTORY: ${{ inputs.hcp_terraform_config_directory }}
+  TF_LOG: ${{ inputs.hcp_terraform_log_level }}
+  TF_MAX_TIMEOUT: ${{ inputs.hcp_terraform_max_timeout }}
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Upload configuration
+        uses: hashicorp/tfc-workflows-github/actions/upload-configuration@v1.3.1
+        id: upload
+        with:
+          workspace: ${{ env.TF_WORKSPACE }}
+          directory: ${{ env.CONFIG_DIRECTORY }}
+
+      - name: Create run
+        uses: hashicorp/tfc-workflows-github/actions/create-run@v1.3.1
+        id: create_run
+        with:
+          workspace: ${{ env.TF_WORKSPACE }}
+          configuration_version: ${{ steps.upload.outputs.configuration_version_id }}
+
+      - name: Apply run
+        uses: hashicorp/tfc-workflows-github/actions/apply-run@v1.3.1
+        id: apply
+        if: ${{ fromJSON(steps.create_run.outputs.payload).data.attributes.actions.IsConfirmable }}
+        with:
+          run: ${{ steps.create_run.outputs.run_id }}
+          comment: "Apply Run from GitHub Actions CI ${{ github.sha }}"
