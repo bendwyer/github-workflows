@@ -1,0 +1,121 @@
+name: hcp-terraform-plan
+
+on:
+  workflow_call:
+    inputs:
+      hcp_terraform_organization:
+        description: Name of existing HCP Terraform organization.
+        required: true
+        type: string
+      hcp_terraform_config_directory:
+        description: Path (relative to repository root) where Terraform files are located
+        required: false
+        default: ./terraform
+        type: string
+      hcp_terraform_log_level:
+        description: Debugging log level options. One of OFF, ERROR, INFO, DEBUG.
+        required: false
+        default: OFF
+        type: string
+      hcp_terraform_max_timeout:
+        description: Max wait timeout to wait for actions to reach desired or errored state. For example, 1h30 OR 30m.
+        required: false
+        default: 1h
+        type: string
+      hcp_terraform_workspace:
+        description: Name of existing HCP Terraform workspace.
+        required: true
+        type: string
+    secrets:
+      hcp_terraform_api_token:
+        description: HCP Terraform API token.
+        required: true
+
+env:
+  TF_CLOUD_ORGANIZATION: ${{ inputs.hcp_terraform_organization }}
+  TF_API_TOKEN: "${{ secrets.TF_API_TOKEN }}"
+  TF_WORKSPACE: ${{ inputs.hcp_terraform_workspace }}
+  CONFIG_DIRECTORY: ${{ inputs.hcp_terraform_config_directory }}
+  TF_LOG: ${{ inputs.hcp_terraform_log_level }}
+  TF_MAX_TIMEOUT: ${{ inputs.hcp_terraform_max_timeout }}
+
+jobs:
+  # This job uses the default GITHUB_TOKEN
+  # Ensure workflow permissions are set to "Read and write"
+  plan:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Upload configuration
+        uses: hashicorp/tfc-workflows-github/actions/upload-configuration@v1.3.1
+        id: upload
+        with:
+          workspace: ${{ env.TF_WORKSPACE }}
+          directory: ${{ env.CONFIG_DIRECTORY }}
+          speculative: true
+
+      # Run may fail, if so continue to output PR comment
+      # step.terraform_cloud_check_run_status will fail job after PR comment is created/updated.
+      - name: Create plan-only run
+        uses: hashicorp/tfc-workflows-github/actions/create-run@v1.3.1
+        id: run
+        continue-on-error: true
+        with:
+          workspace: ${{ env.TF_WORKSPACE }}
+          configuration_version: ${{ steps.upload.outputs.configuration_version_id }}
+          plan_only: true
+
+      - name: Return plan output
+        uses: hashicorp/tfc-workflows-github/actions/plan-output@v1.3.1
+        id: plan_output
+        with:
+          plan: ${{ steps.run.outputs.plan_id }}
+
+      - name: Create comment
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            // Retrieve existing bot comments for the PR
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            })
+            const botComment = comments.find(comment => {
+              return comment.user.type === 'Bot' && comment.body.includes('HCP Terraform Plan Output')
+            })
+            const output = `#### HCP Terraform Plan Output
+                \`\`\`\n
+                Plan: ${{ steps.plan_output.outputs.add }} to add, ${{ steps.plan_output.outputs.change }} to change, ${{ steps.plan_output.outputs.destroy }} to destroy.
+                \`\`\`
+                [HCP Terraform Plan](${{ steps.run.outputs.run_link }})
+                `
+            // If we have a comment, update it, otherwise create a new one
+            if (botComment) {
+              github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: output
+              })
+            } else {
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: output
+              })
+            }
+
+      - name: Check run status
+        id: terraform_cloud_check_run_status
+        if: ${{ steps.run.outputs.run_status != 'planned_and_finished'}}
+        run: |
+          echo "HCP Terraform run failed or requires further attention."
+          echo "Run status: '${{ steps.run.outputs.run_status }}'"
+          echo "${{ steps.run.outputs.run_link }}"
+          exit 1
