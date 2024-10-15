@@ -1,6 +1,5 @@
 ---
 name: devcontainer-features-documentation
-
 on:
   workflow_call:
     inputs:
@@ -44,17 +43,14 @@ jobs:
           base-path-to-features: ./src
 
       - name: Detect README changes
-        uses: dorny/paths-filter@v3
+        uses: tj-actions/changed-files@v45
         id: changes
         with:
-          # base: HEAD #ignored if triggered by PR according to docs
-          filters: |
-            readme:
-              - "/**/README.md"
-          token: ${{ steps.app_token.outputs.token }}
+          files: |
+            src/**/README.md
 
       - name: Create a PR for documentation
-        if: steps.changes.outputs.readme == 'true'
+        if: steps.changes.outputs.any_changed == 'true'
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
         run: |
