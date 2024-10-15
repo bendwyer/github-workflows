@@ -29,6 +29,7 @@ jobs:
   test:
     needs:
       - changes
+    if: needs.changes.outputs.features != '' && toJson(fromJson(needs.changes.outputs.features)) != '[]'
     runs-on: ubuntu-24.04
     continue-on-error: true
     strategy:
@@ -54,6 +55,7 @@ jobs:
   scenarios:
     needs:
       - changes
+    if: needs.changes.outputs.features != '' && toJson(fromJson(needs.changes.outputs.features)) != '[]'
     runs-on: ubuntu-24.04
     continue-on-error: true
     strategy:
