@@ -82,7 +82,7 @@ jobs:
             FILENAME=$(basename $file)
             echo "$FILENAME"
             echo "Setting BLOB_SHA"
-            BLOB_SHA=$(curl -s -H "Authorization: token ${{ steps.app_token.outputs.toke }}" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/${{ github.repository }}/contents/$file?ref=$BRANCH_NAME | jq -r .sha)
+            BLOB_SHA=$(curl -s -H "Authorization: token ${{ steps.app_token.outputs.token }}" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/${{ github.repository }}/contents/$file?ref=$BRANCH_NAME | jq -r .sha)
             if [ "$BLOB_SHA" == "null" ]; then
               BLOB_SHA=""
             fi
