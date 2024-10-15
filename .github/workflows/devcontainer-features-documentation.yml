@@ -49,7 +49,7 @@ jobs:
           base: HEAD
           filters: |
             readme:
-              - "/**/README.md"
+              - "src/**/README.md"
           token: ${{ steps.app_token.outputs.token }}
 
       - name: Create a PR for documentation
