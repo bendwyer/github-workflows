@@ -1,0 +1,88 @@
+---
+name: devcontainer-features-documentation
+
+on:
+  workflow_call:
+    inputs:
+      gh_app_id:
+        description: GitHub App ID
+        required: true
+        type: string
+      owner:
+        description: GitHub App installation owner. Defaults to repository owner. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped only to the current repository.
+        required: false
+        type: string
+      repositories:
+        description: Comma-separated list of repositories to grant access to. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped only to the current repository.
+        required: false
+        type: string
+    secrets:
+      gh_app_private_key:
+        description: GitHub App private key
+        required: true
+
+jobs:
+  docs:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Generate GitHub App token
+        uses: actions/create-github-app-token@v1
+        id: app_token
+        with:
+          app-id: ${{ inputs.gh_app_id }}
+          private-key: ${{ secrets.gh_app_private_key }}
+          owner: ${{ inputs.owner }}
+          repositories: ${{ inputs.repositories }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate documentation
+        uses: devcontainers/action@v1
+        with:
+          generate-docs: true
+          base-path-to-features: ./src
+
+      - name: Detect README changes
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          # base: HEAD #ignored if triggered by PR according to docs
+          filters: |
+            readme:
+              - "/**/README.md"
+          token: ${{ steps.app_token.outputs.token }}
+
+      - name: Create a PR for documentation
+        if: steps.changes.outputs.readme == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        run: |
+          set -e
+
+          # get current branch commit sha
+          echo "Getting latest branch commit SHA"
+          SHA="$(gh api --method GET -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/git/ref/heads/main | -q .object.sha)"
+
+          # create branch
+          echo "Setting branch name variable"
+          BRANCH_NAME="automated-documentation-update-$GITHUB_RUN_ID"
+          echo "Creating new branch $BRANCH_NAME"
+          gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/git/refs -f "ref=refs/heads/$BRANCH_NAME" -f "sha=$SHA"
+
+          # Add / update and commit
+          echo "Committing changes"
+          FILES_CHANGED=$(git status --porcelain | awk '{print $2}')
+          for file in $FILES_CHANGED; do
+            FILENAME=$(basename $file)
+            BLOB_SHA="$(gh api --method GET -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/contents/$file?ref=$BRANCH_NAME | -q .sha)"
+            if [ "$BLOB_SHA" == "null" ]; then
+              BLOB_SHA=""
+            fi
+            gh api --method PUT -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/contents/$file -f "message=Update $FILENAME" -f "content=@<(base64 -i $FILENAME)" -f "branch=$BRANCH_NAME" -f "sha=$BLOB_SHA"
+          done
+
+          # create pr
+          echo "Creating pull request"
+          gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/pulls -f "title=Update generated content" -f "head=$BRANCH_NAME" -f "base=main" -f "body=Automated PR to update generated content"
+        shell: bash
