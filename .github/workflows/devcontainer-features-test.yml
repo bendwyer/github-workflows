@@ -3,6 +3,12 @@ name: devcontainer-features-test
 
 on:
   workflow_call:
+    inputs:
+      filter_file_path:
+        description: Path to YAML file populated with filters.
+        required: false
+        default: .github/filters.yml
+        type: string
 
 jobs:
   changes:
@@ -15,7 +21,7 @@ jobs:
       - uses: dorny/paths-filter@v3
         id: filter
         with:
-          filters: .github/filters.yml
+          filters: ${{ inputs.filter_file_path }}
 
   test:
     needs:
