@@ -43,15 +43,17 @@ jobs:
           base-path-to-features: ./src
 
       - name: Detect README changes
-        uses: tj-actions/changed-files@v45
+        uses: dorny/paths-filter@v3
         id: changes
         with:
-          since_last_remote_commit: true
-          files: |
-            src/**/README.md
+          base: HEAD
+          filters: |
+            readme:
+              - "/**/README.md"
+          token: ${{ steps.app_token.outputs.token }}
 
       - name: Create a PR for documentation
-        if: steps.changes.outputs.any_changed == 'true'
+        if: steps.changes.outputs.readme == 'true'
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token }}
         run: |
