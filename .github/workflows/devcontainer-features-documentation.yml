@@ -57,62 +57,49 @@ jobs:
         run: |
           set -e
 
-          # get current branch commit sha
-          echo "Getting latest main commit SHA"
-          SHA=$(gh api --method GET -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/git/ref/heads/main -q .object.sha)
-          echo "SHA=$SHA"
+          echo "Configuring git settings"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config pull.rebase false
+          echo "Git settings configured successfully"
 
-          # create branch
-          echo "Setting branch name variable"
+          echo "Checking out branch"
           BRANCH_NAME="automated-documentation-update-${{ github.run_id }}"
           echo "BRANCH_NAME=$BRANCH_NAME"
-          echo "Check if branch exists"
-          BRANCH_STATUS=$(gh api --method GET -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/git/ref/heads/$BRANCH_NAME | jq -r .status)
-          echo "BRANCH_STATUS=$BRANCH_STATUS"
-          if [[ $BRANCH_STATUS == "404" || $BRANCH_STATUS == "409" ]]
-          then
-            echo "Creating new branch $BRANCH_NAME"
-            gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/git/refs -f "ref=refs/heads/$BRANCH_NAME" -f "sha=$SHA"
-          else
-            echo "Getting latest $BRANCH_NAME commit sha"
-            BRANCH_SHA=$(gh api --method GET -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/git/ref/heads/$BRANCH_NAME -q .object.sha)
-            echo "BRANCH_SHA=$BRANCH_SHA"
-            echo "Updating branch $BRANCH_NAME"
-            gh api --method PATCH -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/git/refs/heads/$BRANCH_NAME -f "sha=$SHA"
-          fi
+          echo "Checking out $BRANCH_NAME"
+          git checkout -b $BRANCH_NAME
+          echo "Branch checked out successfully"
 
-          # Add / update and commit
-          echo "Setting FILE_CHANGED var"
+          echo "Add/update and commit changes"
+          echo "Settings FILE_CHANGED var"
           FILES_CHANGED=$(git status --porcelain | awk '{print $2}')
-          echo "The following files have changed: $FILES_CHANGED"
+          echo "FILES_CHANGED=$FILES_CHANGED"
           echo "Looping over changed files"
           for file in $FILES_CHANGED; do
             echo "Setting CONTENT var"
             CONTENT=$(base64 -w 0 $file)
-            echo "$file base64 is $CONTENT"
+            echo "$file=$CONTENT"
             echo "Setting FILENAME var"
             FILENAME=$(basename $file)
-            echo "$FILENAME"
+            echo "FILENAME=$FILENAME"
             echo "Setting BLOB_SHA"
             BLOB_SHA=$(curl -s -H "Authorization: token ${{ steps.app_token.outputs.token }}" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/${{ github.repository }}/contents/$file?ref=$BRANCH_NAME | jq -r .sha)
             if [ "$BLOB_SHA" == "null" ]
             then
               BLOB_SHA=""
             fi
-            echo "BLOB_SHA is $BLOB_SHA"
+            echo "BLOB_SHA=$BLOB_SHA"
             echo "Committing changes"
             gh api --method PUT -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/contents/$file -f "message=Update $FILENAME" -f "content=$CONTENT" -f "branch=$BRANCH_NAME" -f "sha=$BLOB_SHA"
+            echo "Changes committed"
           done
 
-          # create pr
-          echo "Check if PR exists"
-          PR_NUMBER=$(gh api --method GET -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/pulls -f "head=${{ github.repository_owner }}:$BRANCH_NAME" -f "base=main" -q [].number)
-          if [[ -z $PR_NUMBER ]]
-          then
-            echo "Creating pull request"
-            gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/pulls -f "title=Update generated content" -f "head=$BRANCH_NAME" -f "base=main" -f "body=Automated PR to update generated content"
-          else
-            echo "Update pull request"
-            gh api --method PATCH -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/pulls/$PR_NUMER -f "title=Update generated content" -f "base=main" -f "body=Automated PR to update generated content"
-          fi
+          echo "Push changes to remote"
+          git push origin "$BRANCH_NAME"
+          echo "Changes pushed to $BRANCH_NAME"
+
+          echo "Create/update a pull request"
+          PR_TITLE="Update documentation"
+          PR_BODY="Automated PR to update documentation."
+          gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/pulls -f "title=$PR_TITLE" -f "body=$PR_BODY" -f "head=$BRANCH_NAME" -f "base=main"
         shell: bash
