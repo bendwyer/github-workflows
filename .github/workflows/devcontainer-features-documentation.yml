@@ -1,6 +1,5 @@
 ---
 name: devcontainer-features-documentation
-
 on:
   workflow_call:
     inputs:
@@ -44,45 +43,18 @@ jobs:
           base-path-to-features: ./src
 
       - name: Detect README changes
-        uses: dorny/paths-filter@v3
+        uses: tj-actions/verify-changed-files@v20
         id: changes
         with:
-          # base: HEAD #ignored if triggered by PR according to docs
-          filters: |
-            readme:
-              - "/**/README.md"
+          files: |
+            src/**/README.md
+
+      - name: Create pull request
+        if: steps.changes.outputs.files_changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          base: main
+          branch: automated-documentation-update-${{ github.run_id }}
+          sign-commits: true
           token: ${{ steps.app_token.outputs.token }}
-
-      - name: Create a PR for documentation
-        if: steps.changes.outputs.readme == 'true'
-        env:
-          GH_TOKEN: ${{ steps.app_token.outputs.token }}
-        run: |
-          set -e
-
-          # get current branch commit sha
-          echo "Getting latest branch commit SHA"
-          SHA="$(gh api --method GET -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/git/ref/heads/main | -q .object.sha)"
-
-          # create branch
-          echo "Setting branch name variable"
-          BRANCH_NAME="automated-documentation-update-$GITHUB_RUN_ID"
-          echo "Creating new branch $BRANCH_NAME"
-          gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/git/refs -f "ref=refs/heads/$BRANCH_NAME" -f "sha=$SHA"
-
-          # Add / update and commit
-          echo "Committing changes"
-          FILES_CHANGED=$(git status --porcelain | awk '{print $2}')
-          for file in $FILES_CHANGED; do
-            FILENAME=$(basename $file)
-            BLOB_SHA="$(gh api --method GET -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/contents/$file?ref=$BRANCH_NAME | -q .sha)"
-            if [ "$BLOB_SHA" == "null" ]; then
-              BLOB_SHA=""
-            fi
-            gh api --method PUT -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/contents/$file -f "message=Update $FILENAME" -f "content=@<(base64 -i $FILENAME)" -f "branch=$BRANCH_NAME" -f "sha=$BLOB_SHA"
-          done
-
-          # create pr
-          echo "Creating pull request"
-          gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/pulls -f "title=Update generated content" -f "head=$BRANCH_NAME" -f "base=main" -f "body=Automated PR to update generated content"
-        shell: bash
+          title: "Update documentation"
