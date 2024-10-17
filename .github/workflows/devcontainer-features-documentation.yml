@@ -49,60 +49,11 @@ jobs:
           files: |
             src/**/README.md
 
-      - name: Create a PR for documentation
+      - name: Create pull request
         if: steps.changes.outputs.files_changed == 'true'
-        # continue-on-error: true
-        env:
-          GH_TOKEN: ${{ steps.app_token.outputs.token }}
-        run: |
-          set -e
-
-          echo "Configuring git settings"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
-          git config pull.rebase false
-          echo "Git settings configured successfully"
-
-          echo "Checking out branch"
-          BRANCH_NAME="automated-documentation-update-${{ github.run_id }}"
-          echo "BRANCH_NAME=$BRANCH_NAME"
-          echo "Checking out $BRANCH_NAME"
-          git checkout -b $BRANCH_NAME
-          echo "Branch checked out successfully"
-
-          echo "Add/update and commit changes"
-          echo "Settings FILE_CHANGED var"
-          FILES_CHANGED=$(git status --porcelain | awk '{print $2}')
-          echo "FILES_CHANGED=$FILES_CHANGED"
-          echo "Looping over changed files"
-          for file in $FILES_CHANGED; do
-            echo "Setting CONTENT var"
-            CONTENT=$(base64 -w 0 $file)
-            echo "$file=$CONTENT"
-            echo "Setting FILENAME var"
-            FILENAME=$(basename $file)
-            echo "FILENAME=$FILENAME"
-            echo "Setting BLOB_SHA"
-            BLOB_SHA=$(curl -s -H "Authorization: token ${{ steps.app_token.outputs.token }}" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" https://api.github.com/repos/${{ github.repository }}/contents/$file?ref=$BRANCH_NAME | jq -r .sha)
-            if [ "$BLOB_SHA" == "null" ]
-            then
-              BLOB_SHA=""
-            fi
-            echo "BLOB_SHA=$BLOB_SHA"
-            echo "Committing changes"
-            gh api --method PUT -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/contents/$file -f "message=Update $FILENAME" -f "content=$CONTENT" -f "branch=$BRANCH_NAME" -f "sha=$BLOB_SHA"
-            echo "Changes committed"
-          done
-
-          echo "Push changes to remote"
-          echo "Setting remote"
-          git remote set-url origin https://${{ steps.app_token.outputs.token }}@github.com/${{ github.repository }}
-          echo "Pushing changes"
-          git push origin "$BRANCH_NAME"
-          echo "Changes pushed to $BRANCH_NAME"
-
-          echo "Create/update a pull request"
-          PR_TITLE="Update documentation"
-          PR_BODY="Automated PR to update documentation."
-          gh api --method POST -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" /repos/${{ github.repository }}/pulls -f "title=$PR_TITLE" -f "body=$PR_BODY" -f "head=$BRANCH_NAME" -f "base=main"
-        shell: bash
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: automated-documentation-update-${{ github.run_id }}
+          sign-commits: true
+          token: steps.app_token.outputs.token
+          title: "Update documentation"
