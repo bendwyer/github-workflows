@@ -56,5 +56,5 @@ jobs:
           base: main
           branch: automated-documentation-update-${{ github.run_id }}
           sign-commits: true
-          token: steps.app_token.outputs.token
+          token: ${{ steps.app_token.outputs.token }}
           title: "Update documentation"
