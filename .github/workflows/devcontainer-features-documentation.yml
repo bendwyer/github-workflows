@@ -53,6 +53,7 @@ jobs:
         if: steps.changes.outputs.files_changed == 'true'
         uses: peter-evans/create-pull-request@v7
         with:
+          base: main
           branch: automated-documentation-update-${{ github.run_id }}
           sign-commits: true
           token: steps.app_token.outputs.token
