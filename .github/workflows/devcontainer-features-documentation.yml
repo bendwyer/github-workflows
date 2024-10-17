@@ -54,7 +54,7 @@ jobs:
         uses: peter-evans/create-pull-request@v7
         with:
           base: main
-          branch: automated-documentation-update-${{ github.run_id }}
+          branch: automated-documentation-update
           sign-commits: true
           token: ${{ steps.app_token.outputs.token }}
-          title: "Update documentation"
+          title: "Automated documentation update"
