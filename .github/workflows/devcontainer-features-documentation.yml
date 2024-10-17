@@ -95,7 +95,9 @@ jobs:
           done
 
           echo "Push changes to remote"
-          git remote add origin https://${{ steps.app_token.outputs.token }}@github.com/${{ github.repository }}
+          echo "Setting remote"
+          git remote set-url origin https://${{ steps.app_token.outputs.token }}@github.com/${{ github.repository }}
+          echo "Pushing changes"
           git push origin "$BRANCH_NAME"
           echo "Changes pushed to $BRANCH_NAME"
 
