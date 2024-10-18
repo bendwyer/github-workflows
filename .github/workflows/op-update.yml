@@ -1,0 +1,68 @@
+---
+  name: op-update
+
+  on:
+    workflow_call:
+      inputs:
+        gh_app_id:
+          description: GitHub App ID
+          required: true
+          type: string
+        owner:
+          description: GitHub App installation owner. Defaults to repository owner. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped only to the current repository.
+          required: false
+          type: string
+        repositories:
+          description: Comma-separated list of repositories to grant access to. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped only to the current repository.
+          required: false
+          type: string
+      secrets:
+        gh_app_private_key:
+          description: GitHub App private key
+          required: true
+
+  jobs:
+    download:
+      runs-on: ubuntu-24.04
+      steps:
+        - name: Download latest version of op
+          working-directory: terraform/tools
+          id: op
+          run: |
+            ARCH="amd64"
+            OP_LOCAL_VERSION=$(cat version.json | jq -r ".version")
+            echo "local_version=$OP_LOCAL_VERION" >> "$GITHUB_OUTPUT"
+            OP_REMOTE_VERSION="v$(curl https://app-updates.agilebits.com/check/1/0/CLI2/en/2.0.0/N -s | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
+            echo "remote_version=$OP_REMOTE_VERION" >> "$GITHUB_OUTPUT"
+            if [[ $OP_LOCAL_VERSION != $OP_REMOTE_VERSION ]]
+            then
+              curl -sSfo op.zip https://cache.agilebits.com/dist/1P/op2/pkg/"$OP_REMOTE_VERSION"/op_linux_"$ARCH"_"$OP_REMOTE_VERSION".zip
+              unzip -oq op.zip -x op.sig
+              rm op.zip
+              VERSION_JSON=$(jq -n --arg VERSION "$OP_REMOTE_VERSION" '{version: $VERSION}')
+              echo $NEW_VERSION_NUMBER | jq -j . > version.json
+              echo "op updated to $OP_REMOTE_VERSION"
+            else
+              echo "op $OP_LOCAL_VERSION is up-to-date"
+            fi
+          shell: bash
+
+        - name: Generate GitHub App token
+          if: steps.op.outputs.local_version != steps.op.outputs.remote_version
+          uses: actions/create-github-app-token@v1
+          id: app_token
+          with:
+            app-id: ${{ inputs.gh_app_id }}
+            private-key: ${{ secrets.gh_app_private_key }}
+            owner: ${{ inputs.owner }}
+            repositories: ${{ inputs.repositories }}
+
+        - name: Open PR with changes
+          if: steps.op.outputs.local_version != steps.op.outputs.remote_version
+          uses: peter-evans/create-pull-request@v7
+          with:
+            base: main
+            branch: update-op
+            sign-commits: true
+            token: ${{ steps.app_token.outputs.token }}
+            title: "Bump op from ${{ steps.op.outputs.local_version }} to ${{ steps.op.outputs.remote_version }}"
