@@ -45,7 +45,7 @@ jobs:
           token: ${{ steps.app_token.outputs.token }}
 
       - name: Update README
-        uses: npalm/action-docs-action@v3.1.1
+        uses: npalm/action-docs-action@v3.1.2
 
       - name: Detect README changes
         uses: dorny/paths-filter@v3
