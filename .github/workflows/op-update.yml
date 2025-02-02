@@ -34,9 +34,9 @@
           run: |
             ARCH="amd64"
             OP_LOCAL_VERSION=$(cat version.json | jq -r ".version")
-            echo "local_version=$OP_LOCAL_VERION" >> "$GITHUB_OUTPUT"
+            echo "local_version=$OP_LOCAL_VERSION" >> "$GITHUB_OUTPUT"
             OP_REMOTE_VERSION="v$(curl https://app-updates.agilebits.com/check/1/0/CLI2/en/2.0.0/N -s | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
-            echo "remote_version=$OP_REMOTE_VERION" >> "$GITHUB_OUTPUT"
+            echo "remote_version=$OP_REMOTE_VERSION" >> "$GITHUB_OUTPUT"
             if [[ $OP_LOCAL_VERSION != $OP_REMOTE_VERSION ]]
             then
               curl -sSfo op.zip https://cache.agilebits.com/dist/1P/op2/pkg/"$OP_REMOTE_VERSION"/op_linux_"$ARCH"_"$OP_REMOTE_VERSION".zip
