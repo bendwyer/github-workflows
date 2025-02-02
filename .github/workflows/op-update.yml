@@ -42,7 +42,7 @@
               curl -sSfo op.zip https://cache.agilebits.com/dist/1P/op2/pkg/"$OP_REMOTE_VERSION"/op_linux_"$ARCH"_"$OP_REMOTE_VERSION".zip
               unzip -oq op.zip -x op.sig
               rm op.zip
-              VERSION_JSON=$(jq -n --arg VERSION "$OP_REMOTE_VERSION" '{version: $VERSION}')
+              NEW_VERSION_NUMBER=$(jq -n --arg VERSION "$OP_REMOTE_VERSION" '{version: $VERSION}')
               echo $NEW_VERSION_NUMBER | jq -j . > version.json
               echo "op updated to $OP_REMOTE_VERSION"
             else
