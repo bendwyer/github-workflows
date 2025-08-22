@@ -38,7 +38,7 @@ jobs:
           - ubuntu-24.04
           - ubuntu-24.04-arm
         features: ${{ fromJSON(needs.changes.outputs.features) }}
-        baseImage:
+        baseImages:
           - ubuntu:24.04
           - debian:12
           - mcr.microsoft.com/devcontainers/base:ubuntu24.04
@@ -50,8 +50,8 @@ jobs:
       - name: Install latest devcontainer CLI
         run: npm install -g @devcontainers/cli
 
-      - name: Generate tests for ${{ matrix.features }} against ${{ matrix.baseImage }}
-        run: devcontainer features test  --skip-scenarios -f ${{ matrix.features }} -i ${{ matrix.baseImage }} .
+      - name: Generate tests for ${{ matrix.features }} against ${{ matrix.baseImages }}
+        run: devcontainer features test  --skip-scenarios -f ${{ matrix.features }} -i ${{ matrix.baseImages }} .
 
   scenarios:
     needs:
