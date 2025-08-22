@@ -30,10 +30,13 @@ jobs:
     needs:
       - changes
     if: needs.changes.outputs.features != '' && toJson(fromJson(needs.changes.outputs.features)) != '[]'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.architectures }}
     continue-on-error: true
     strategy:
       matrix:
+        architectures:
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
         features: ${{ fromJSON(needs.changes.outputs.features) }}
         baseImage:
           - ubuntu:noble
@@ -54,10 +57,13 @@ jobs:
     needs:
       - changes
     if: needs.changes.outputs.features != '' && toJson(fromJson(needs.changes.outputs.features)) != '[]'
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.architectures }}
     continue-on-error: true
     strategy:
       matrix:
+        architectures:
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
         features: ${{ fromJSON(needs.changes.outputs.features) }}
     steps:
       - name: Checkout repository
