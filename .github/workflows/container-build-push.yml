@@ -41,6 +41,9 @@ jobs:
           - ubuntu-24.04-arm
         images: ${{ fromJSON(needs.changes.outputs.images) }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@v5
