@@ -8,6 +8,11 @@ on:
         required: false
         default: .github/filters.yml
         type: string
+      images_root_folder:
+        description: Root folder where images are stored. Must include trailing slash.
+        required: false
+        default: images/
+        type: string
 
 jobs:
   changes:
@@ -53,7 +58,7 @@ jobs:
         id: build
         uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.images }}
+          context: ${{ inputs.images_root_folder }}${{ matrix.images }}
           labels: ${{ steps.meta.outputs.labels }}
           tags: ${{ steps.meta.outputs.tags }} # ghcr.io/${{ github.repository }}
           outputs: type=image,push-by-digest=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }},name-canonical=true,push=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -103,8 +108,8 @@ jobs:
       - name: Get version for image
         id: version
         run: |
-          if [[ -f "${{ matrix.images }}/get-version.sh" ]]; then
-            VERSION=$(cd "images/${{ matrix.images }}" && bash get-version.sh)
+          if [[ -f "${{ inputs.images_root_folder }}${{ matrix.images }}/get-version.sh" ]]; then
+            VERSION=$(cd "${{ inputs.images_root_folder }}${{ matrix.images }}" && bash get-version.sh)
 
             # Split version into components
             IFS='.' read -ra PARTS <<< "$VERSION"
