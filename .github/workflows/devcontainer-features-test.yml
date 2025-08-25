@@ -19,7 +19,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - uses: dorny/paths-filter@v3
         id: filter
@@ -45,7 +45,7 @@ jobs:
           - mcr.microsoft.com/devcontainers/base:debian12
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install latest devcontainer CLI
         run: npm install -g @devcontainers/cli
@@ -67,7 +67,7 @@ jobs:
         features: ${{ fromJSON(needs.changes.outputs.features) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install latest devcontainer CLI
         run: npm install -g @devcontainers/cli
