@@ -36,6 +36,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
+      - name: Ensure labels exist
+        run: |
+          gh label create major --color 5319E7 --force
+          gh label create breaking --color B60205 --force
+          gh label create minor --color 0052CC --force
+          gh label create feature --color A2EEEF --force
+          gh label create enhancement --color A2EEEF --force
+          gh label create deprecated --color D93F0B --force
+          gh label create bug --color FBCA04 --force
+          gh label create patch --color FBCA04 --force
+          gh label create skip-changelog --color EDEDED --force
+        shell: bash
+
       - name: Apply category label to PR
         uses: release-drafter/release-drafter@v6
         with:
