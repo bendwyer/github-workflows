@@ -37,6 +37,8 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Ensure labels exist
+        env:
+          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
         run: |
           gh label create major --color 5319E7 --force
           gh label create breaking --color B60205 --force
