@@ -21,7 +21,7 @@ jobs:
       images: ${{ steps.filter.outputs.changes }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - uses: dorny/paths-filter@v3
         id: filter
@@ -42,7 +42,7 @@ jobs:
         images: ${{ fromJSON(needs.changes.outputs.images) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Docker metadata
         id: meta
@@ -95,7 +95,7 @@ jobs:
         images: ${{ fromJSON(needs.changes.outputs.images) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Download digests
         uses: actions/download-artifact@v6
