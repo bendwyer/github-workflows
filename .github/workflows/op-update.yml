@@ -62,7 +62,7 @@
 
         - name: Open PR with changes
           if: steps.op.outputs.local_version != steps.op.outputs.remote_version
-          uses: peter-evans/create-pull-request@v7
+          uses: peter-evans/create-pull-request@v8
           with:
             base: main
             branch: update-op
