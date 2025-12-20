@@ -79,6 +79,7 @@ jobs:
           context: ${{ inputs.images_root_folder }}${{ matrix.images }}
           labels: ${{ steps.meta.outputs.labels }}
           tags: ghcr.io/${{ github.repository }}/${{ matrix.images }}
+          provenance: false
           outputs: type=image,push-by-digest=${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }},name-canonical=true,push=${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
 
       - name: Export digest
