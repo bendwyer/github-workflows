@@ -19,14 +19,14 @@ jobs:
   changes:
     runs-on: ubuntu-24.04
     outputs:
-      images: ${{ steps.filter.outputs.changes || steps.schedule.outputs.images }}
+      images: ${{ steps.filter.outputs.changes || steps.all.outputs.images }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Get all images for scheduled runs
-        if: github.event_name == 'schedule'
-        id: schedule
+      - name: Get all images for scheduled/manual runs
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        id: all
         run: |
           # Extract all keys from filters.yml and format as JSON array
           images=$(yq eval 'keys' ${{ inputs.filter_file_path }} | yq eval -o=json '.' | jq -c '.')
@@ -34,7 +34,7 @@ jobs:
         shell: bash
 
       - name: Detect changed images
-        if: github.event_name != 'schedule'
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
         uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -79,7 +79,7 @@ jobs:
           context: ${{ inputs.images_root_folder }}${{ matrix.images }}
           labels: ${{ steps.meta.outputs.labels }}
           tags: ghcr.io/${{ github.repository }}/${{ matrix.images }}
-          outputs: type=image,push-by-digest=${{ github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }},name-canonical=true,push=${{ github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+          outputs: type=image,push-by-digest=${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }},name-canonical=true,push=${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
 
       - name: Export digest
         run: |
@@ -100,7 +100,7 @@ jobs:
     needs:
       - build
       - changes
-    if: github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
     strategy:
       matrix:
