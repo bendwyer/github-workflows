@@ -186,6 +186,6 @@ jobs:
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          package: ${{ matrix.images }}
+          package: ${{ github.event.repository.name }}/${{ matrix.images }}
           older-than: 90 days
           delete-untagged: true
