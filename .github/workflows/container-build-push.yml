@@ -168,3 +168,24 @@ jobs:
         run: |
           docker buildx imagetools inspect ghcr.io/${{ github.repository }}/${{ matrix.images }}:${{ steps.version.outputs.version }}
         shell: bash
+
+  cleanup:
+    needs:
+      - build
+      - merge
+      - changes
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        images: ${{ fromJSON(needs.changes.outputs.images) }}
+    permissions:
+      packages: write
+    steps:
+      - name: Delete old images for ${{ matrix.images }}
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          package: ${{ matrix.images }}
+          older-than: 90 days
+          delete-untagged: true
