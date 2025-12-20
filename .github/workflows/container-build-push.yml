@@ -188,5 +188,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           package: ${{ github.event.repository.name }}/${{ matrix.images }}
+          keep-n-tagged: 5
           older-than: 90 days
           delete-untagged: true
