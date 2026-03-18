@@ -4,6 +4,10 @@ name: flux-publish-oci
 on:
   workflow_call:
     inputs:
+      oci_repo:
+        description: GHCR OCI repository path without component suffix (e.g. 'ghcr.io/bendwyer/d2-infra').
+        required: true
+        type: string
       component_name:
         description: Component name (e.g. cert-manager for infra/apps). Leave empty to publish the repo root as a single artifact (e.g. fleet).
         required: false
@@ -56,7 +60,7 @@ jobs:
         uses: controlplaneio-fluxcd/distribution/actions/push@f2b659f0cec358552f981171c5f98e4972183b0c # v2.7.5
         id: push
         with:
-          repository: ghcr.io/${{ github.repository }}${{ inputs.component_name != '' && format('/{0}', inputs.component_name) || '' }}
+          repository: ${{ inputs.oci_repo }}${{ inputs.component_name != '' && format('/{0}', inputs.component_name) || '' }}
           path: ${{ inputs.component_name != '' && format('{0}/{1}', inputs.artifact_path, inputs.component_name) || inputs.artifact_path }}
           diff-tag: latest # Only push if different from :latest
 
