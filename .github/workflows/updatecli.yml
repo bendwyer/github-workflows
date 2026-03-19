@@ -1,0 +1,51 @@
+---
+name: updatecli
+
+on:
+  workflow_call:
+    inputs:
+      automerge_config:
+        description: Path to the updatecli automerge manifest file.
+        required: true
+        type: string
+      breaking_config:
+        description: Path to the updatecli breaking-change manifest file.
+        required: true
+        type: string
+    secrets:
+      token:
+        description: Token for GitHub API access (typically secrets.GITHUB_TOKEN).
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Install updatecli
+        uses: updatecli/updatecli-action@4b17f4ea784de29f71f85f9bc4955402ba1ae53c # v2.100.0
+
+      - name: Run updatecli (automerge)
+        run: updatecli apply --config "${{ inputs.automerge_config }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.token }}
+
+  breaking:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Install updatecli
+        uses: updatecli/updatecli-action@4b17f4ea784de29f71f85f9bc4955402ba1ae53c # v2.100.0
+
+      - name: Run updatecli (breaking)
+        run: updatecli apply --config "${{ inputs.breaking_config }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.token }}
