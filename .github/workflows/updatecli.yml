@@ -12,6 +12,10 @@ on:
         description: Path to the updatecli breaking-change manifest file.
         required: true
         type: string
+      values:
+        description: Path to the updatecli values file.
+        required: true
+        type: string
     secrets:
       token:
         description: Token for GitHub API access (typically secrets.GITHUB_TOKEN).
@@ -32,7 +36,7 @@ jobs:
         uses: updatecli/updatecli-action@4b17f4ea784de29f71f85f9bc4955402ba1ae53c # v2.100.0
 
       - name: Run updatecli (automerge)
-        run: updatecli apply --config "${{ inputs.automerge_config }}"
+        run: updatecli apply --config "${{ inputs.automerge_config }}" --values "${{ inputs.values }}"
         env:
           GITHUB_TOKEN: ${{ secrets.token }}
 
@@ -46,6 +50,6 @@ jobs:
         uses: updatecli/updatecli-action@4b17f4ea784de29f71f85f9bc4955402ba1ae53c # v2.100.0
 
       - name: Run updatecli (breaking)
-        run: updatecli apply --config "${{ inputs.breaking_config }}"
+        run: updatecli apply --config "${{ inputs.breaking_config }}" --values "${{ inputs.values }}"
         env:
           GITHUB_TOKEN: ${{ secrets.token }}
