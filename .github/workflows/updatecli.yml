@@ -39,6 +39,7 @@ jobs:
         run: updatecli apply --config "${{ inputs.automerge_config }}" --values "${{ inputs.values }}"
         env:
           GITHUB_TOKEN: ${{ secrets.token }}
+          GITHUB_ACTOR: ${{ github.actor }}
 
   breaking:
     runs-on: ubuntu-24.04
@@ -50,6 +51,8 @@ jobs:
         uses: updatecli/updatecli-action@4b17f4ea784de29f71f85f9bc4955402ba1ae53c # v2.100.0
 
       - name: Run updatecli (breaking)
+        continue-on-error: true # Expected to fail when no breaking versions exist
         run: updatecli apply --config "${{ inputs.breaking_config }}" --values "${{ inputs.values }}"
         env:
           GITHUB_TOKEN: ${{ secrets.token }}
+          GITHUB_ACTOR: ${{ github.actor }}
