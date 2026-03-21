@@ -25,10 +25,6 @@ on:
         description: GitHub App private key.
         required: true
 
-permissions:
-  contents: write
-  pull-requests: write
-
 jobs:
   automerge:
     runs-on: ubuntu-24.04
@@ -51,7 +47,8 @@ jobs:
       - name: Run updatecli (automerge)
         run: updatecli apply --config "${{ inputs.automerge_config }}" --values "${{ inputs.values }}"
         env:
-          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+          UPDATECLI_GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+          UPDATECLI_GITHUB_USERNAME: x-access-token
 
   breaking:
     runs-on: ubuntu-24.04
@@ -75,4 +72,5 @@ jobs:
         continue-on-error: true # Expected to fail when no breaking versions exist
         run: updatecli apply --config "${{ inputs.breaking_config }}" --values "${{ inputs.values }}"
         env:
-          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+          UPDATECLI_GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+          UPDATECLI_GITHUB_USERNAME: x-access-token
