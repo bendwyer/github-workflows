@@ -28,6 +28,7 @@ jobs:
         with:
           app-id: ${{ inputs.gh_app_id }}
           private-key: ${{ secrets.gh_app_private_key }}
+          permission-metadata: read
           permission-contents: write
           permission-pull-requests: write
 
