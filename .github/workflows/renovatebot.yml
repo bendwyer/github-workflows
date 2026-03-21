@@ -42,3 +42,4 @@ jobs:
         env:
           RENOVATE_PLATFORM_COMMIT: 'true'
           LOG_LEVEL: 'debug'
+          RENOVATE_REPOSITORIES: '["${{ github.repository }}"]'
