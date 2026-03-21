@@ -8,11 +8,6 @@ on:
         description: GHCR OCI repository path without component suffix (e.g. 'ghcr.io/bendwyer/d2-infra').
         required: true
         type: string
-      component_name:
-        description: Component name (e.g. cert-manager for infra/apps). Leave empty to publish the repo root as a single artifact (e.g. fleet).
-        required: false
-        type: string
-        default: ""
       artifact_path:
         description: Directory containing components (e.g. './components' for infra/apps). Leave as './' for repos published as a single artifact (e.g. fleet).
         required: false
@@ -33,8 +28,31 @@ permissions:
   id-token: write # For cosign keyless signing
 
 jobs:
-  publish:
+  detect:
     runs-on: ubuntu-24.04
+    outputs:
+      components: ${{ steps.detect.outputs.components }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Detect components
+        id: detect
+        run: |
+          if [ "${{ inputs.artifact_path }}" = "./" ]; then
+            echo 'components=[""]' >> "$GITHUB_OUTPUT"
+          else
+            components=$(ls -d ${{ inputs.artifact_path }}/*/ | xargs -n1 basename | jq -R -s -c 'split("\n") | map(select(. != ""))')
+            echo "components=${components}" >> "$GITHUB_OUTPUT"
+          fi
+
+  publish:
+    needs: detect
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        component: ${{ fromJSON(needs.detect.outputs.components) }}
     steps:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -60,8 +78,8 @@ jobs:
         uses: controlplaneio-fluxcd/distribution/actions/push@f2b659f0cec358552f981171c5f98e4972183b0c # v2.7.5
         id: push
         with:
-          repository: ${{ inputs.oci_repo }}${{ inputs.component_name != '' && format('/{0}', inputs.component_name) || '' }}
-          path: ${{ inputs.component_name != '' && format('{0}/{1}', inputs.artifact_path, inputs.component_name) || inputs.artifact_path }}
+          repository: ${{ inputs.oci_repo }}${{ matrix.component != '' && format('/{0}', matrix.component) || '' }}
+          path: ${{ matrix.component != '' && format('{0}/{1}', inputs.artifact_path, matrix.component) || inputs.artifact_path }}
           diff-tag: latest # Only push if different from :latest
 
       - name: Sign artifact
@@ -73,5 +91,5 @@ jobs:
       - name: Validate artifact (PR only)
         if: github.event_name == 'pull_request'
         run: |
-          echo "::notice::PR validation - ${{ inputs.component_name != '' && inputs.component_name || 'root' }} artifact build successful"
-          flux push artifact oci://localhost:5000/test:pr --path="${{ inputs.component_name != '' && format('{0}/{1}', inputs.artifact_path, inputs.component_name) || inputs.artifact_path }}" || true
+          echo "::notice::PR validation - ${{ matrix.component != '' && matrix.component || 'root' }} artifact build successful"
+          flux push artifact oci://localhost:5000/test:pr --path="${{ matrix.component != '' && format('{0}/{1}', inputs.artifact_path, matrix.component) || inputs.artifact_path }}" || true
