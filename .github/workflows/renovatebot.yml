@@ -29,6 +29,7 @@ jobs:
           app-id: ${{ inputs.gh_app_id }}
           private-key: ${{ secrets.gh_app_private_key }}
           permission-contents: write
+          permission-issues: write
           permission-pull-requests: write
 
       - name: Checkout
