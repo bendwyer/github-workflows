@@ -1,0 +1,160 @@
+---
+name: omni-sync
+
+on:
+  workflow_call:
+    inputs:
+      omnictl_version:
+        description: omnictl version.
+        required: true
+        type: string
+      sops_version:
+        description: SOPS version.
+        required: true
+        type: string
+      cluster:
+        description: Cluster to sync (empty for all).
+        required: false
+        type: string
+        default: ""
+      dry_run:
+        description: Dry run only.
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      SOPS_AGE_KEY:
+        description: age private key for SOPS decryption.
+        required: true
+      OMNI_ENDPOINT:
+        description: Omni API endpoint URL.
+        required: true
+      OMNI_SERVICE_ACCOUNT_KEY:
+        description: Omni service account key.
+        required: true
+
+jobs:
+  validate:
+    name: Validate Templates
+    runs-on: ubuntu-24.04
+    env:
+      OMNI_ENDPOINT: ${{ secrets.OMNI_ENDPOINT }}
+      OMNI_SERVICE_ACCOUNT_KEY: ${{ secrets.OMNI_SERVICE_ACCOUNT_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Install omnictl
+        run: |
+          curl -Lo omnictl "https://github.com/siderolabs/omni/releases/download/v${{ inputs.omnictl_version }}/omnictl-linux-amd64"
+          chmod +x omnictl
+          sudo mv omnictl /usr/local/bin/
+
+      - name: Install SOPS
+        run: |
+          curl -Lo sops "https://github.com/getsops/sops/releases/download/v${{ inputs.sops_version }}/sops-v${{ inputs.sops_version }}.linux.amd64"
+          chmod +x sops
+          sudo mv sops /usr/local/bin/
+
+      - name: Configure SOPS
+        run: |
+          mkdir -p ~/.config/sops/age
+          echo "${{ secrets.SOPS_AGE_KEY }}" > ~/.config/sops/age/keys.txt
+
+      - name: Validate machine classes
+        run: |
+          if [[ -d machineclasses ]]; then
+            for mc in machineclasses/*.yaml; do
+              [[ -f "$mc" ]] || continue
+              echo "Validating machine class: $mc"
+              omnictl apply -f "$mc" --dry-run
+            done
+          fi
+
+      - name: Validate cluster templates
+        run: |
+          target_cluster="${{ inputs.cluster }}"
+
+          for cluster_dir in clusters/*/; do
+            [[ -d "$cluster_dir" ]] || continue
+            cluster_name=$(basename "$cluster_dir")
+
+            if [[ -n "$target_cluster" && "$cluster_name" != "$target_cluster" ]]; then
+              continue
+            fi
+
+            echo "Validating cluster: $cluster_name"
+            pushd "$cluster_dir" > /dev/null
+            sops -d cluster.yaml | omnictl cluster template validate -f /dev/stdin
+            popd > /dev/null
+          done
+
+  sync:
+    name: Sync Templates
+    needs: validate
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    env:
+      OMNI_ENDPOINT: ${{ secrets.OMNI_ENDPOINT }}
+      OMNI_SERVICE_ACCOUNT_KEY: ${{ secrets.OMNI_SERVICE_ACCOUNT_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Install omnictl
+        run: |
+          curl -Lo omnictl "https://github.com/siderolabs/omni/releases/download/v${{ inputs.omnictl_version }}/omnictl-linux-amd64"
+          chmod +x omnictl
+          sudo mv omnictl /usr/local/bin/
+
+      - name: Install SOPS
+        run: |
+          curl -Lo sops "https://github.com/getsops/sops/releases/download/v${{ inputs.sops_version }}/sops-v${{ inputs.sops_version }}.linux.amd64"
+          chmod +x sops
+          sudo mv sops /usr/local/bin/
+
+      - name: Configure SOPS
+        run: |
+          mkdir -p ~/.config/sops/age
+          echo "${{ secrets.SOPS_AGE_KEY }}" > ~/.config/sops/age/keys.txt
+
+      - name: Apply machine classes
+        run: |
+          dry_run="${{ inputs.dry_run }}"
+
+          if [[ -d machineclasses ]]; then
+            for mc in machineclasses/*.yaml; do
+              [[ -f "$mc" ]] || continue
+              echo "Applying machine class: $mc"
+              if [[ "$dry_run" == "true" ]]; then
+                omnictl apply -f "$mc" --dry-run
+              else
+                omnictl apply -f "$mc"
+              fi
+            done
+          fi
+
+      - name: Sync cluster templates
+        run: |
+          target_cluster="${{ inputs.cluster }}"
+          dry_run="${{ inputs.dry_run }}"
+
+          for cluster_dir in clusters/*/; do
+            [[ -d "$cluster_dir" ]] || continue
+            cluster_name=$(basename "$cluster_dir")
+
+            if [[ -n "$target_cluster" && "$cluster_name" != "$target_cluster" ]]; then
+              continue
+            fi
+
+            echo "Syncing cluster: $cluster_name"
+            pushd "$cluster_dir" > /dev/null
+
+            if [[ "$dry_run" == "true" ]]; then
+              sops -d cluster.yaml | omnictl cluster template sync -f /dev/stdin --dry-run
+            else
+              sops -d cluster.yaml | omnictl cluster template sync -f /dev/stdin
+            fi
+
+            popd > /dev/null
+          done

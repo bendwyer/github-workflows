@@ -1,0 +1,180 @@
+---
+name: talos-sync
+
+on:
+  workflow_call:
+    inputs:
+      talosctl_version:
+        description: talosctl version.
+        required: true
+        type: string
+      sops_version:
+        description: SOPS version.
+        required: true
+        type: string
+      cluster:
+        description: Cluster to sync (empty for all).
+        required: false
+        type: string
+        default: ""
+      dry_run:
+        description: Dry run only.
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      SOPS_AGE_KEY:
+        description: age private key for SOPS decryption.
+        required: true
+      TS_OAUTH_CLIENT_ID:
+        description: Tailscale OAuth client ID.
+        required: true
+      TS_OAUTH_SECRET:
+        description: Tailscale OAuth client secret.
+        required: true
+
+jobs:
+  validate:
+    name: Validate Patches
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Install talosctl
+        run: |
+          curl -Lo talosctl "https://github.com/siderolabs/talos/releases/download/v${{ inputs.talosctl_version }}/talosctl-linux-amd64"
+          chmod +x talosctl
+          sudo mv talosctl /usr/local/bin/
+
+      - name: Validate patch files
+        run: |
+          target_cluster="${{ inputs.cluster }}"
+
+          # Generate a throwaway config to validate patches against
+          talosctl gen config dummy https://dummy:6443 --output /tmp/validate
+          base_config="/tmp/validate/controlplane.yaml"
+
+          for cluster_dir in clusters/*/; do
+            [[ -d "$cluster_dir" ]] || continue
+            cluster_name=$(basename "$cluster_dir")
+
+            if [[ -n "$target_cluster" && "$cluster_name" != "$target_cluster" ]]; then
+              continue
+            fi
+
+            echo "Validating patches for cluster: $cluster_name"
+
+            # Collect plain (non-encrypted) patches
+            patch_args=()
+            for patch in "$cluster_dir"/patches/*.yaml; do
+              [[ -f "$patch" ]] || continue
+              if grep -q '^sops:' "$patch" 2>/dev/null; then
+                echo "  Skipping encrypted: $(basename "$patch")"
+                continue
+              fi
+              echo "  Including: $(basename "$patch")"
+              patch_args+=(-p "@$patch")
+            done
+
+            # Validate by applying all patches to the throwaway config
+            if [[ ${#patch_args[@]} -gt 0 ]]; then
+              talosctl machineconfig patch "$base_config" "${patch_args[@]}" -o /dev/null
+              echo "Validation passed"
+            else
+              echo "No plain patches to validate"
+            fi
+          done
+
+          rm -rf /tmp/validate
+
+  sync:
+    name: Sync Config
+    needs: validate
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Install talosctl
+        run: |
+          curl -Lo talosctl "https://github.com/siderolabs/talos/releases/download/v${{ inputs.talosctl_version }}/talosctl-linux-amd64"
+          chmod +x talosctl
+          sudo mv talosctl /usr/local/bin/
+
+      - name: Install SOPS
+        run: |
+          curl -Lo sops "https://github.com/getsops/sops/releases/download/v${{ inputs.sops_version }}/sops-v${{ inputs.sops_version }}.linux.amd64"
+          chmod +x sops
+          sudo mv sops /usr/local/bin/
+
+      - name: Configure SOPS
+        run: |
+          mkdir -p ~/.config/sops/age
+          echo "${{ secrets.SOPS_AGE_KEY }}" > ~/.config/sops/age/keys.txt
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@6cae46e2d796f265265cfcf628b72a32b4d7cade # v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:github
+
+      - name: Apply patches
+        run: |
+          target_cluster="${{ inputs.cluster }}"
+          dry_run="${{ inputs.dry_run }}"
+
+          for cluster_dir in clusters/*/; do
+            [[ -d "$cluster_dir" ]] || continue
+            cluster_name=$(basename "$cluster_dir")
+
+            if [[ -n "$target_cluster" && "$cluster_name" != "$target_cluster" ]]; then
+              continue
+            fi
+
+            echo "Syncing cluster: $cluster_name"
+
+            # Locate talosconfig
+            talosconfig="$cluster_dir/talosconfig.yaml"
+            if [[ ! -f "$talosconfig" ]]; then
+              echo "Error: talosconfig not found at $talosconfig"
+              exit 1
+            fi
+
+            # Determine node endpoint from talosconfig
+            node=$(sops -d "$talosconfig" | yq '.contexts[.context].endpoints[0]')
+            echo "Target node: $node"
+
+            # Wait for tailnet peer visibility
+            echo "  Waiting for peer connectivity..."
+            tailscale ping --timeout=60s "$node"
+
+            # Apply each patch
+            for patch in "$cluster_dir"/patches/*.yaml; do
+              [[ -f "$patch" ]] || continue
+              patch_name=$(basename "$patch")
+              echo "  Applying: $patch_name"
+
+              if [[ "$dry_run" == "true" ]]; then
+                echo "  [dry-run] Would apply: $patch_name"
+                continue
+              fi
+
+              # Use process substitution to avoid temp files
+              if grep -q '^sops:' "$patch" 2>/dev/null; then
+                talosctl patch machineconfig \
+                  --talosconfig <(sops -d "$talosconfig") \
+                  --nodes "$node" \
+                  -p @<(sops -d "$patch") \
+                  --mode=no-reboot || echo "  Warning: patch $patch_name may have already been applied"
+              else
+                talosctl patch machineconfig \
+                  --talosconfig <(sops -d "$talosconfig") \
+                  --nodes "$node" \
+                  -p "@$patch" \
+                  --mode=no-reboot || echo "  Warning: patch $patch_name may have already been applied"
+              fi
+            done
+          done
