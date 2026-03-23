@@ -174,9 +174,10 @@ jobs:
               patch_name=$(basename "$patch")
               echo "  Applying: $patch_name"
 
+              # Build dry-run flag
+              dry_run_flag=""
               if [[ "$dry_run" == "true" ]]; then
-                echo "  [dry-run] Would apply: $patch_name"
-                continue
+                dry_run_flag="--dry-run"
               fi
 
               # Use process substitution to avoid temp files
@@ -185,13 +186,13 @@ jobs:
                   --talosconfig <(sops -d "$talosconfig") \
                   --nodes "$node" \
                   -p @<(sops -d "$patch") \
-                  --mode=no-reboot || echo "  Warning: patch $patch_name may have already been applied"
+                  --mode=no-reboot $dry_run_flag
               else
                 talosctl patch machineconfig \
                   --talosconfig <(sops -d "$talosconfig") \
                   --nodes "$node" \
                   -p "@$patch" \
-                  --mode=no-reboot || echo "  Warning: patch $patch_name may have already been applied"
+                  --mode=no-reboot $dry_run_flag
               fi
             done
           done
