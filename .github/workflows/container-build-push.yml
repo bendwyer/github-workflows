@@ -35,7 +35,7 @@ jobs:
 
       - name: Detect changed images
         if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
-        uses: dorny/paths-filter@v4
+        uses: dorny/paths-filter@v4.0.1
         id: filter
         with:
           filters: ${{ inputs.filter_file_path }}
