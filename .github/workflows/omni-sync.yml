@@ -119,7 +119,11 @@ jobs:
 
       - name: Apply machine classes
         run: |
-          dry_run="${{ inputs.dry_run }}"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            dry_run="true"
+          else
+            dry_run="${{ inputs.dry_run }}"
+          fi
 
           if [[ -d machineclasses ]]; then
             for mc in machineclasses/*.yaml; do
