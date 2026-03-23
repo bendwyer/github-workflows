@@ -92,7 +92,6 @@ jobs:
   sync:
     name: Sync Templates
     needs: validate
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     env:
       OMNI_ENDPOINT: ${{ secrets.OMNI_ENDPOINT }}
@@ -137,7 +136,11 @@ jobs:
       - name: Sync cluster templates
         run: |
           target_cluster="${{ inputs.cluster }}"
-          dry_run="${{ inputs.dry_run }}"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            dry_run="true"
+          else
+            dry_run="${{ inputs.dry_run }}"
+          fi
 
           for cluster_dir in clusters/*/; do
             [[ -d "$cluster_dir" ]] || continue

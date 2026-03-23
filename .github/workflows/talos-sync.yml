@@ -105,7 +105,6 @@ jobs:
 
   sync:
     needs: validate
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -138,7 +137,11 @@ jobs:
       - name: Apply patches
         run: |
           target_cluster="${{ inputs.cluster }}"
-          dry_run="${{ inputs.dry_run }}"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            dry_run="true"
+          else
+            dry_run="${{ inputs.dry_run }}"
+          fi
 
           for cluster_dir in clusters/*/; do
             [[ -d "$cluster_dir" ]] || continue
