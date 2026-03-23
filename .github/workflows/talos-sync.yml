@@ -36,7 +36,6 @@ on:
 
 jobs:
   validate:
-    name: Validate Patches
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -48,6 +47,17 @@ jobs:
           chmod +x talosctl
           sudo mv talosctl /usr/local/bin/
 
+      - name: Install SOPS
+        run: |
+          curl -Lo sops "https://github.com/getsops/sops/releases/download/v${{ inputs.sops_version }}/sops-v${{ inputs.sops_version }}.linux.amd64"
+          chmod +x sops
+          sudo mv sops /usr/local/bin/
+
+      - name: Configure SOPS
+        run: |
+          mkdir -p ~/.config/sops/age
+          echo "${{ secrets.SOPS_AGE_KEY }}" > ~/.config/sops/age/keys.txt
+
       - name: Validate patch files
         run: |
           target_cluster="${{ inputs.cluster }}"
@@ -55,6 +65,7 @@ jobs:
           # Generate a throwaway config to validate patches against
           talosctl gen config dummy https://dummy:6443 --output /tmp/validate
           base_config="/tmp/validate/controlplane.yaml"
+          decrypted_dir=$(mktemp -d)
 
           for cluster_dir in clusters/*/; do
             [[ -d "$cluster_dir" ]] || continue
@@ -66,31 +77,33 @@ jobs:
 
             echo "Validating patches for cluster: $cluster_name"
 
-            # Collect plain (non-encrypted) patches
+            # Collect all patches, decrypting encrypted ones to temp dir
             patch_args=()
             for patch in "$cluster_dir"/patches/*.yaml; do
               [[ -f "$patch" ]] || continue
+              patch_name=$(basename "$patch")
               if grep -q '^sops:' "$patch" 2>/dev/null; then
-                echo "  Skipping encrypted: $(basename "$patch")"
-                continue
+                echo "  Including (encrypted): $patch_name"
+                sops -d "$patch" > "$decrypted_dir/$patch_name"
+                patch_args+=(-p "@$decrypted_dir/$patch_name")
+              else
+                echo "  Including: $patch_name"
+                patch_args+=(-p "@$patch")
               fi
-              echo "  Including: $(basename "$patch")"
-              patch_args+=(-p "@$patch")
             done
 
             # Validate by applying all patches to the throwaway config
             if [[ ${#patch_args[@]} -gt 0 ]]; then
               talosctl machineconfig patch "$base_config" "${patch_args[@]}" -o /dev/null
               echo "Validation passed"
-            else
-              echo "No plain patches to validate"
             fi
+
+            rm -f "$decrypted_dir"/*.yaml
           done
 
-          rm -rf /tmp/validate
+          rm -rf /tmp/validate "$decrypted_dir"
 
   sync:
-    name: Sync Config
     needs: validate
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
