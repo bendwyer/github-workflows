@@ -58,13 +58,9 @@ jobs:
           mkdir -p ~/.config/sops/age
           echo "${{ secrets.SOPS_AGE_KEY }}" > ~/.config/sops/age/keys.txt
 
-      - name: Validate patch files
+      - name: Validate configs
         run: |
           target_cluster="${{ inputs.cluster }}"
-
-          # Generate a throwaway config to validate patches against
-          talosctl gen config dummy https://dummy:6443 --output /tmp/validate
-          base_config="/tmp/validate/controlplane.yaml"
           decrypted_dir=$(mktemp -d)
 
           for cluster_dir in clusters/*/; do
@@ -75,9 +71,27 @@ jobs:
               continue
             fi
 
-            echo "Validating patches for cluster: $cluster_name"
+            echo "Validating cluster: $cluster_name"
 
-            # Collect all patches, decrypting encrypted ones to temp dir
+            # Read cluster config
+            config="$cluster_dir/config.yaml"
+            if [[ ! -f "$config" ]]; then
+              echo "Error: config.yaml not found at $config"
+              exit 1
+            fi
+            endpoint=$(yq '.endpoint' "$config")
+            kubernetes_version=$(yq '.kubernetes_version' "$config")
+            talos_version=$(yq '.talos_version' "$config")
+
+            # Decrypt secrets
+            secrets="$cluster_dir/secrets.yaml"
+            if [[ ! -f "$secrets" ]]; then
+              echo "Error: secrets.yaml not found at $secrets"
+              exit 1
+            fi
+            sops -d "$secrets" > "$decrypted_dir/secrets.yaml"
+
+            # Collect patch args, decrypting encrypted ones
             patch_args=()
             for patch in "$cluster_dir"/patches/*.yaml; do
               [[ -f "$patch" ]] || continue
@@ -85,23 +99,30 @@ jobs:
               if grep -q '^sops:' "$patch" 2>/dev/null; then
                 echo "  Including (encrypted): $patch_name"
                 sops -d "$patch" > "$decrypted_dir/$patch_name"
-                patch_args+=(-p "@$decrypted_dir/$patch_name")
+                patch_args+=(--config-patch "@$decrypted_dir/$patch_name")
               else
                 echo "  Including: $patch_name"
-                patch_args+=(-p "@$patch")
+                patch_args+=(--config-patch "@$patch")
               fi
             done
 
-            # Validate by applying all patches to the throwaway config
-            if [[ ${#patch_args[@]} -gt 0 ]]; then
-              talosctl machineconfig patch "$base_config" "${patch_args[@]}" -o /dev/null
-              echo "Validation passed"
-            fi
+            # Generate config and validate
+            talosctl gen config \
+              --with-secrets "$decrypted_dir/secrets.yaml" \
+              --kubernetes-version "$kubernetes_version" \
+              --talos-version "$talos_version" \
+              "$cluster_name" "$endpoint" \
+              "${patch_args[@]}" \
+              --output "$decrypted_dir/output" \
+              --output-types controlplane
 
-            rm -f "$decrypted_dir"/*.yaml
+            talosctl validate -m metal -c "$decrypted_dir/output/controlplane.yaml"
+            echo "Validation passed"
+
+            rm -rf "$decrypted_dir/output" "$decrypted_dir"/*.yaml
           done
 
-          rm -rf /tmp/validate "$decrypted_dir"
+          rm -rf "$decrypted_dir"
 
   sync:
     needs: validate
@@ -134,7 +155,7 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:github
 
-      - name: Apply patches
+      - name: Apply config
         run: |
           target_cluster="${{ inputs.cluster }}"
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
@@ -142,6 +163,8 @@ jobs:
           else
             dry_run="${{ inputs.dry_run }}"
           fi
+
+          decrypted_dir=$(mktemp -d)
 
           for cluster_dir in clusters/*/; do
             [[ -d "$cluster_dir" ]] || continue
@@ -153,46 +176,69 @@ jobs:
 
             echo "Syncing cluster: $cluster_name"
 
-            # Locate talosconfig
+            # Read cluster config
+            config="$cluster_dir/config.yaml"
+            endpoint=$(yq '.endpoint' "$config")
+            kubernetes_version=$(yq '.kubernetes_version' "$config")
+            talos_version=$(yq '.talos_version' "$config")
+
+            # Decrypt secrets
+            sops -d "$cluster_dir/secrets.yaml" > "$decrypted_dir/secrets.yaml"
+
+            # Locate talosconfig and determine node address
             talosconfig="$cluster_dir/talosconfig.yaml"
             if [[ ! -f "$talosconfig" ]]; then
               echo "Error: talosconfig not found at $talosconfig"
               exit 1
             fi
-
-            # Determine node endpoint from talosconfig
-            node=$(sops -d "$talosconfig" | yq '.contexts[.context].endpoints[0]')
+            sops -d "$talosconfig" > "$decrypted_dir/talosconfig"
+            node=$(yq '.contexts[.context].endpoints[0]' "$decrypted_dir/talosconfig")
             echo "Target node: $node"
 
             # Wait for tailnet peer visibility
             echo "  Waiting for peer connectivity..."
             tailscale ping --timeout=60s "$node"
 
-            # Apply each patch
+            # Collect patch args, decrypting encrypted ones
+            patch_args=()
             for patch in "$cluster_dir"/patches/*.yaml; do
               [[ -f "$patch" ]] || continue
               patch_name=$(basename "$patch")
-              echo "  Applying: $patch_name"
-
-              # Build dry-run flag
-              dry_run_flag=""
-              if [[ "$dry_run" == "true" ]]; then
-                dry_run_flag="--dry-run"
-              fi
-
-              # Use process substitution to avoid temp files
               if grep -q '^sops:' "$patch" 2>/dev/null; then
-                talosctl patch machineconfig \
-                  --talosconfig <(sops -d "$talosconfig") \
-                  --nodes "$node" \
-                  -p @<(sops -d "$patch") \
-                  --mode=no-reboot $dry_run_flag
+                echo "  Including (encrypted): $patch_name"
+                sops -d "$patch" > "$decrypted_dir/$patch_name"
+                patch_args+=(--config-patch "@$decrypted_dir/$patch_name")
               else
-                talosctl patch machineconfig \
-                  --talosconfig <(sops -d "$talosconfig") \
-                  --nodes "$node" \
-                  -p "@$patch" \
-                  --mode=no-reboot $dry_run_flag
+                echo "  Including: $patch_name"
+                patch_args+=(--config-patch "@$patch")
               fi
             done
+
+            # Generate the full machine config from secrets + patches
+            talosctl gen config \
+              --with-secrets "$decrypted_dir/secrets.yaml" \
+              --kubernetes-version "$kubernetes_version" \
+              --talos-version "$talos_version" \
+              "$cluster_name" "$endpoint" \
+              "${patch_args[@]}" \
+              --output "$decrypted_dir/output" \
+              --output-types controlplane
+
+            # Apply the generated config
+            dry_run_flag=""
+            if [[ "$dry_run" == "true" ]]; then
+              dry_run_flag="--dry-run"
+            fi
+
+            echo "  Applying config (dry_run=$dry_run)..."
+            talosctl apply-config \
+              --talosconfig "$decrypted_dir/talosconfig" \
+              --nodes "$node" \
+              --file "$decrypted_dir/output/controlplane.yaml" \
+              --mode=no-reboot $dry_run_flag
+
+            # Clean up decrypted files
+            rm -rf "$decrypted_dir/output" "$decrypted_dir"/*.yaml "$decrypted_dir/talosconfig"
           done
+
+          rm -rf "$decrypted_dir"
