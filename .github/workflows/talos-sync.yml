@@ -113,13 +113,13 @@ jobs:
               --talos-version "$talos_version" \
               "$cluster_name" "$endpoint" \
               "${patch_args[@]}" \
-              --output "$decrypted_dir/output" \
+              --output "$decrypted_dir/controlplane.yaml" \
               --output-types controlplane
 
-            talosctl validate -m metal -c "$decrypted_dir/output/controlplane.yaml"
+            talosctl validate -m metal -c "$decrypted_dir/controlplane.yaml"
             echo "Validation passed"
 
-            rm -rf "$decrypted_dir/output" "$decrypted_dir"/*.yaml
+            rm -f "$decrypted_dir/controlplane.yaml" "$decrypted_dir"/*.yaml
           done
 
           rm -rf "$decrypted_dir"
@@ -221,7 +221,7 @@ jobs:
               --talos-version "$talos_version" \
               "$cluster_name" "$endpoint" \
               "${patch_args[@]}" \
-              --output "$decrypted_dir/output" \
+              --output "$decrypted_dir/controlplane.yaml" \
               --output-types controlplane
 
             # Apply the generated config
@@ -234,11 +234,11 @@ jobs:
             talosctl apply-config \
               --talosconfig "$decrypted_dir/talosconfig" \
               --nodes "$node" \
-              --file "$decrypted_dir/output/controlplane.yaml" \
+              --file "$decrypted_dir/controlplane.yaml" \
               --mode=no-reboot $dry_run_flag
 
             # Clean up decrypted files
-            rm -rf "$decrypted_dir/output" "$decrypted_dir"/*.yaml "$decrypted_dir/talosconfig"
+            rm -f "$decrypted_dir/controlplane.yaml" "$decrypted_dir"/*.yaml "$decrypted_dir/talosconfig"
           done
 
           rm -rf "$decrypted_dir"
