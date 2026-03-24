@@ -58,6 +58,54 @@ jobs:
           mkdir -p ~/.config/sops/age
           echo "${{ secrets.SOPS_AGE_KEY }}" > ~/.config/sops/age/keys.txt
 
+      - name: Mask secrets
+        run: |
+          # Registers sensitive values from SOPS-encrypted patches with GitHub's
+          # log masking (::add-mask::). Any registered value is replaced with ***
+          # in all subsequent log output, keeping config diffs readable while
+          # preventing credential leaks.
+          #
+          # Currently handles two patch formats automatically:
+          #   - cluster.inlineManifests[].contents — masks all Secret data values
+          #   - ExtensionServiceConfig environment[] — masks values whose variable
+          #     names contain KEY, TOKEN, SECRET, or AUTH (case-insensitive)
+          #
+          # Adding a new secret patch:
+          #   - If it uses either format above, no changes needed.
+          #   - If it introduces a new format, add an extraction block below.
+
+          for cluster_dir in clusters/*/; do
+            [[ -d "$cluster_dir" ]] || continue
+
+            for patch in "$cluster_dir"/patches/*.yaml; do
+              [[ -f "$patch" ]] || continue
+              grep -q '^sops:' "$patch" 2>/dev/null || continue
+              decrypted=$(sops -d "$patch")
+
+              # Mask Secret data values from inlineManifests
+              count=$(echo "$decrypted" | yq '.cluster.inlineManifests | length' 2>/dev/null)
+              if [[ "$count" =~ ^[0-9]+$ ]] && [[ "$count" -gt 0 ]]; then
+                for ((i=0; i<count; i++)); do
+                  echo "$decrypted" \
+                    | yq ".cluster.inlineManifests[$i].contents" 2>/dev/null \
+                    | yq -N 'select(has("data")) | .data[]' 2>/dev/null \
+                    | while IFS= read -r val; do
+                        [[ -n "$val" ]] && echo "::add-mask::$val"
+                      done
+                done
+              fi
+
+              # Mask sensitive environment variables
+              echo "$decrypted" \
+                | yq '.environment[]' 2>/dev/null \
+                | grep -iE '^[^=]*(KEY|TOKEN|SECRET|AUTH)=' \
+                | cut -d= -f2- \
+                | while IFS= read -r val; do
+                    [[ -n "$val" ]] && echo "::add-mask::$val"
+                  done || true
+            done
+          done
+
       - name: Validate configs
         run: |
           target_cluster="${{ inputs.cluster }}"
@@ -154,6 +202,40 @@ jobs:
           oauth-client-id: ${{ inputs.ts_oauth_client_id }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:github
+
+      - name: Mask secrets
+        run: |
+          # See the identical step in the validate job for full documentation.
+
+          for cluster_dir in clusters/*/; do
+            [[ -d "$cluster_dir" ]] || continue
+
+            for patch in "$cluster_dir"/patches/*.yaml; do
+              [[ -f "$patch" ]] || continue
+              grep -q '^sops:' "$patch" 2>/dev/null || continue
+              decrypted=$(sops -d "$patch")
+
+              count=$(echo "$decrypted" | yq '.cluster.inlineManifests | length' 2>/dev/null)
+              if [[ "$count" =~ ^[0-9]+$ ]] && [[ "$count" -gt 0 ]]; then
+                for ((i=0; i<count; i++)); do
+                  echo "$decrypted" \
+                    | yq ".cluster.inlineManifests[$i].contents" 2>/dev/null \
+                    | yq -N 'select(has("data")) | .data[]' 2>/dev/null \
+                    | while IFS= read -r val; do
+                        [[ -n "$val" ]] && echo "::add-mask::$val"
+                      done
+                done
+              fi
+
+              echo "$decrypted" \
+                | yq '.environment[]' 2>/dev/null \
+                | grep -iE '^[^=]*(KEY|TOKEN|SECRET|AUTH)=' \
+                | cut -d= -f2- \
+                | while IFS= read -r val; do
+                    [[ -n "$val" ]] && echo "::add-mask::$val"
+                  done || true
+            done
+          done
 
       - name: Apply config
         run: |
