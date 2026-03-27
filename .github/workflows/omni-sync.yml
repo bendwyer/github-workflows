@@ -36,7 +36,6 @@ on:
 
 jobs:
   validate:
-    name: Validate Templates
     runs-on: ubuntu-24.04
     env:
       OMNI_ENDPOINT: ${{ secrets.OMNI_ENDPOINT }}
@@ -96,7 +95,6 @@ jobs:
           done
 
   sync:
-    name: Sync Templates
     needs: validate
     runs-on: ubuntu-24.04
     env:
