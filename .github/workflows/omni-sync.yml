@@ -5,9 +5,10 @@ on:
   workflow_call:
     inputs:
       omnictl_version:
-        description: omnictl version.
-        required: true
+        description: omnictl version (empty for latest).
+        required: false
         type: string
+        default: ""
       sops_version:
         description: SOPS version.
         required: true
@@ -46,7 +47,12 @@ jobs:
 
       - name: Install omnictl
         run: |
-          curl -Lo omnictl "https://github.com/siderolabs/omni/releases/download/v${{ inputs.omnictl_version }}/omnictl-linux-amd64"
+          if [[ -n "${{ inputs.omnictl_version }}" ]]; then
+            url="https://github.com/siderolabs/omni/releases/download/v${{ inputs.omnictl_version }}/omnictl-linux-amd64"
+          else
+            url="https://github.com/siderolabs/omni/releases/latest/download/omnictl-linux-amd64"
+          fi
+          curl -Lo omnictl "$url"
           chmod +x omnictl
           sudo mv omnictl /usr/local/bin/
 
@@ -102,7 +108,12 @@ jobs:
 
       - name: Install omnictl
         run: |
-          curl -Lo omnictl "https://github.com/siderolabs/omni/releases/download/v${{ inputs.omnictl_version }}/omnictl-linux-amd64"
+          if [[ -n "${{ inputs.omnictl_version }}" ]]; then
+            url="https://github.com/siderolabs/omni/releases/download/v${{ inputs.omnictl_version }}/omnictl-linux-amd64"
+          else
+            url="https://github.com/siderolabs/omni/releases/latest/download/omnictl-linux-amd64"
+          fi
+          curl -Lo omnictl "$url"
           chmod +x omnictl
           sudo mv omnictl /usr/local/bin/
 
