@@ -13,10 +13,6 @@ on:
         required: false
         type: string
         default: ./
-      cosign_version:
-        description: Cosign release version for keyless signing.
-        type: string
-        default: v2.6.1
     secrets:
       ghcr_token:
         description: Token for GHCR authentication (typically secrets.GITHUB_TOKEN).
@@ -62,8 +58,6 @@ jobs:
 
       - name: Setup cosign
         uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
-        with:
-          cosign-release: ${{ inputs.cosign_version }}
 
       - name: Login to GHCR
         if: github.event_name != 'pull_request'
