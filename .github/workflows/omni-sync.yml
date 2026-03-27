@@ -80,6 +80,9 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:github
 
+      - name: Wait for peer connectivity
+        run: tailscale ping --timeout=60s "$(echo "$OMNI_ENDPOINT" | sed 's|https\?://||;s|[:/].*||')"
+
       - name: Validate machine classes
         run: |
           if [[ -d machineclasses ]]; then
@@ -146,6 +149,9 @@ jobs:
           oauth-client-id: ${{ inputs.ts_oauth_client_id }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:github
+
+      - name: Wait for peer connectivity
+        run: tailscale ping --timeout=60s "$(echo "$OMNI_ENDPOINT" | sed 's|https\?://||;s|[:/].*||')"
 
       - name: Apply machine classes
         run: |
