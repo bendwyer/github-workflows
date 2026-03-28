@@ -59,6 +59,11 @@ jobs:
           mkdir -p ~/.kube
           sops -d "clusters/${{ inputs.cluster }}/kubeconfig.yaml" > ~/.kube/config
 
+      - name: Wait for peer connectivity
+        run: |
+          node=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' | sed 's|https://||;s|:.*||')
+          tailscale ping --timeout=60s "$node"
+
       - name: Bootstrap
         run: |
           clusters/${{ inputs.cluster }}/bootstrap/bootstrap.sh
