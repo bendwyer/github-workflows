@@ -1,0 +1,64 @@
+---
+name: talos-bootstrap
+
+on:
+  workflow_call:
+    inputs:
+      cluster:
+        description: Cluster to bootstrap.
+        required: true
+        type: string
+      sops_version:
+        description: SOPS version.
+        required: true
+        type: string
+      ts_oauth_client_id:
+        description: Tailscale OAuth client ID.
+        required: true
+        type: string
+    secrets:
+      SOPS_AGE_KEY:
+        description: age private key for SOPS decryption.
+        required: true
+      TS_OAUTH_SECRET:
+        description: Tailscale OAuth client secret.
+        required: true
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Install SOPS
+        run: |
+          curl -Lo sops "https://github.com/getsops/sops/releases/download/v${{ inputs.sops_version }}/sops-v${{ inputs.sops_version }}.linux.amd64"
+          chmod +x sops
+          sudo mv sops /usr/local/bin/
+
+      - name: Configure SOPS
+        run: |
+          mkdir -p ~/.config/sops/age
+          echo "${{ secrets.SOPS_AGE_KEY }}" > ~/.config/sops/age/keys.txt
+
+      - name: Install Helm and Helmfile
+        uses: helmfile/helmfile-action@d9fefe29b0d07e9ab187ecfe1d63eff91e0a070c # v2.4.1
+        with:
+          helmfile-args: version
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4.1.2
+        with:
+          oauth-client-id: ${{ inputs.ts_oauth_client_id }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:github
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          sops -d "clusters/${{ inputs.cluster }}/kubeconfig.yaml" > ~/.kube/config
+
+      - name: Bootstrap
+        run: |
+          clusters/${{ inputs.cluster }}/bootstrap/bootstrap.sh
