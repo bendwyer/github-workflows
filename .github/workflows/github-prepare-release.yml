@@ -36,7 +36,7 @@ jobs:
 
       - name: Update release draft
         id: draft
-        uses: release-drafter/release-drafter@v6
+        uses: release-drafter/release-drafter@v7
         with:
           commitish: main
           disable-autolabeler: true
