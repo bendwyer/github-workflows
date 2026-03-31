@@ -23,16 +23,9 @@ on:
         required: false
         type: boolean
         default: false
-      ts_oauth_client_id:
-        description: Tailscale OAuth client ID.
-        required: true
-        type: string
     secrets:
       SOPS_AGE_KEY:
         description: age private key for SOPS decryption.
-        required: true
-      TS_OAUTH_SECRET:
-        description: Tailscale OAuth client secret.
         required: true
       OMNI_ENDPOINT:
         description: Omni API endpoint URL.
@@ -73,16 +66,6 @@ jobs:
           mkdir -p ~/.config/sops/age
           echo "${{ secrets.SOPS_AGE_KEY }}" > ~/.config/sops/age/keys.txt
 
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4.1.2
-        with:
-          oauth-client-id: ${{ inputs.ts_oauth_client_id }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:github
-
-      - name: Wait for peer connectivity
-        run: tailscale ping --timeout=60s "$(echo "$OMNI_ENDPOINT" | sed 's|https\?://||;s|[:/].*||')"
-
       - name: Validate machine classes
         run: |
           if [[ -d machineclasses ]]; then
@@ -90,6 +73,16 @@ jobs:
               [[ -f "$mc" ]] || continue
               echo "Validating machine class: $mc"
               omnictl apply -f "$mc" --dry-run
+            done
+          fi
+
+      - name: Validate installation media
+        run: |
+          if [[ -d installationmedia ]]; then
+            for im in installationmedia/*.yaml; do
+              [[ -f "$im" ]] || continue
+              echo "Validating installation media: $im"
+              sops -d "$im" | omnictl apply -f /dev/stdin --dry-run
             done
           fi
 
@@ -143,16 +136,6 @@ jobs:
           mkdir -p ~/.config/sops/age
           echo "${{ secrets.SOPS_AGE_KEY }}" > ~/.config/sops/age/keys.txt
 
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4.1.2
-        with:
-          oauth-client-id: ${{ inputs.ts_oauth_client_id }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:github
-
-      - name: Wait for peer connectivity
-        run: tailscale ping --timeout=60s "$(echo "$OMNI_ENDPOINT" | sed 's|https\?://||;s|[:/].*||')"
-
       - name: Apply machine classes
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
@@ -169,6 +152,26 @@ jobs:
                 omnictl apply -f "$mc" --dry-run
               else
                 omnictl apply -f "$mc"
+              fi
+            done
+          fi
+
+      - name: Apply installation media
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            dry_run="true"
+          else
+            dry_run="${{ inputs.dry_run }}"
+          fi
+
+          if [[ -d installationmedia ]]; then
+            for im in installationmedia/*.yaml; do
+              [[ -f "$im" ]] || continue
+              echo "Applying installation media: $im"
+              if [[ "$dry_run" == "true" ]]; then
+                sops -d "$im" | omnictl apply -f /dev/stdin --dry-run
+              else
+                sops -d "$im" | omnictl apply -f /dev/stdin
               fi
             done
           fi
