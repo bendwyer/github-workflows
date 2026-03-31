@@ -1,0 +1,57 @@
+---
+name: omni-bootstrap
+
+on:
+  workflow_call:
+    inputs:
+      cluster:
+        description: Cluster to bootstrap.
+        required: true
+        type: string
+      omnictl_version:
+        description: omnictl version (empty for latest).
+        required: false
+        type: string
+        default: ""
+    secrets:
+      OMNI_ENDPOINT:
+        description: Omni API endpoint URL.
+        required: true
+      OMNI_SERVICE_ACCOUNT_KEY:
+        description: Omni service account key.
+        required: true
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-24.04
+    env:
+      OMNI_ENDPOINT: ${{ secrets.OMNI_ENDPOINT }}
+      OMNI_SERVICE_ACCOUNT_KEY: ${{ secrets.OMNI_SERVICE_ACCOUNT_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Install omnictl
+        run: |
+          if [[ -n "${{ inputs.omnictl_version }}" ]]; then
+            url="https://github.com/siderolabs/omni/releases/download/v${{ inputs.omnictl_version }}/omnictl-linux-amd64"
+          else
+            url="https://github.com/siderolabs/omni/releases/latest/download/omnictl-linux-amd64"
+          fi
+          curl -Lo omnictl "$url"
+          chmod +x omnictl
+          sudo mv omnictl /usr/local/bin/
+
+      - name: Install Helm and Helmfile
+        uses: helmfile/helmfile-action@d9fefe29b0d07e9ab187ecfe1d63eff91e0a070c # v2.4.1
+        with:
+          helmfile-args: version
+
+      - name: Get kubeconfig
+        run: |
+          omnictl kubeconfig -c ${{ inputs.cluster }} --force
+          kubectl get nodes
+
+      - name: Bootstrap
+        run: |
+          clusters/${{ inputs.cluster }}/bootstrap/bootstrap.sh
