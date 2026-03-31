@@ -23,12 +23,13 @@ on:
         required: false
         type: boolean
         default: false
+      omni_endpoint:
+        description: Omni API endpoint URL.
+        required: true
+        type: string
     secrets:
       SOPS_AGE_KEY:
         description: age private key for SOPS decryption.
-        required: true
-      OMNI_ENDPOINT:
-        description: Omni API endpoint URL.
         required: true
       OMNI_SERVICE_ACCOUNT_KEY:
         description: Omni service account key.
@@ -38,7 +39,7 @@ jobs:
   validate:
     runs-on: ubuntu-24.04
     env:
-      OMNI_ENDPOINT: ${{ secrets.OMNI_ENDPOINT }}
+      OMNI_ENDPOINT: ${{ inputs.omni_endpoint }}
       OMNI_SERVICE_ACCOUNT_KEY: ${{ secrets.OMNI_SERVICE_ACCOUNT_KEY }}
     steps:
       - name: Checkout
@@ -108,7 +109,7 @@ jobs:
     needs: validate
     runs-on: ubuntu-24.04
     env:
-      OMNI_ENDPOINT: ${{ secrets.OMNI_ENDPOINT }}
+      OMNI_ENDPOINT: ${{ inputs.omni_endpoint }}
       OMNI_SERVICE_ACCOUNT_KEY: ${{ secrets.OMNI_SERVICE_ACCOUNT_KEY }}
     steps:
       - name: Checkout
