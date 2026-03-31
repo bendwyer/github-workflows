@@ -92,7 +92,7 @@ jobs:
             for im in installationmedia/*.yaml; do
               [[ -f "$im" ]] || continue
               grep -q '^sops:' "$im" 2>/dev/null || continue
-              token=$(sops -d "$im" | yq '.jointoken' 2>/dev/null)
+              token=$(sops -d "$im" | yq '.spec.jointoken' 2>/dev/null)
               [[ -n "$token" && "$token" != "null" ]] && echo "::add-mask::$token"
             done
           fi
@@ -187,7 +187,7 @@ jobs:
             for im in installationmedia/*.yaml; do
               [[ -f "$im" ]] || continue
               grep -q '^sops:' "$im" 2>/dev/null || continue
-              token=$(sops -d "$im" | yq '.jointoken' 2>/dev/null)
+              token=$(sops -d "$im" | yq '.spec.jointoken' 2>/dev/null)
               [[ -n "$token" && "$token" != "null" ]] && echo "::add-mask::$token"
             done
           fi
