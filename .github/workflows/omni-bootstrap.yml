@@ -13,10 +13,11 @@ on:
         required: false
         type: string
         default: ""
-    secrets:
-      OMNI_ENDPOINT:
+      omni_endpoint:
         description: Omni API endpoint URL.
         required: true
+        type: string
+    secrets:
       OMNI_SERVICE_ACCOUNT_KEY:
         description: Omni service account key.
         required: true
@@ -25,7 +26,7 @@ jobs:
   bootstrap:
     runs-on: ubuntu-24.04
     env:
-      OMNI_ENDPOINT: ${{ secrets.OMNI_ENDPOINT }}
+      OMNI_ENDPOINT: ${{ inputs.omni_endpoint }}
       OMNI_SERVICE_ACCOUNT_KEY: ${{ secrets.OMNI_SERVICE_ACCOUNT_KEY }}
     steps:
       - name: Checkout
