@@ -17,6 +17,10 @@ on:
         description: Omni API endpoint URL.
         required: true
         type: string
+      omni_service_account_user:
+        description: Omni service account user for kubeconfig.
+        required: true
+        type: string
     secrets:
       OMNI_SERVICE_ACCOUNT_KEY:
         description: Omni service account key.
@@ -50,7 +54,7 @@ jobs:
 
       - name: Get kubeconfig
         run: |
-          omnictl kubeconfig -c ${{ inputs.cluster }} --force
+          omnictl kubeconfig -c ${{ inputs.cluster }} --force --service-account --user ${{ inputs.omni_service_account_user }}
           kubectl get nodes
 
       - name: Bootstrap
