@@ -1,11 +1,11 @@
 ---
-name: kubernetes-monitoring-publish
+name: k8s-monitoring-publish-oci
 
 on:
   workflow_call:
     inputs:
       oci_repo:
-        description: GHCR OCI repository path (e.g. 'ghcr.io/bendwyer/kubernetes-monitoring').
+        description: GHCR OCI repository path (e.g. 'ghcr.io/bendwyer/k8s-monitoring').
         required: true
         type: string
     secrets:
