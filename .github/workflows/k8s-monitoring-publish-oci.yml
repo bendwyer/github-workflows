@@ -52,10 +52,10 @@ jobs:
               [ -f "$json_file" ] || continue
               filename=$(basename "$json_file" .json)
               export DASHBOARD_NAME=$(echo "$filename" | tr '.' '-' | tr '_' '-' | tr '[:upper:]' '[:lower:]')
-              export DASHBOARD_JSON=$(sed 's/^/    /' "$json_file")
 
               echo "  ${filename} → ${artifact}"
-              envsubst '${DASHBOARD_NAME} ${DASHBOARD_JSON}' < templates/configmap-dashboard.yaml > "manifests/${artifact}/dashboard-${DASHBOARD_NAME}.yaml"
+              envsubst '${DASHBOARD_NAME}' < templates/configmap-dashboard.yaml > "manifests/${artifact}/dashboard-${DASHBOARD_NAME}.yaml"
+              sed 's/^/    /' "$json_file" >> "manifests/${artifact}/dashboard-${DASHBOARD_NAME}.yaml"
             done
 
             resources=""
