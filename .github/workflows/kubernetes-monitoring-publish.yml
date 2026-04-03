@@ -1,0 +1,161 @@
+---
+name: kubernetes-monitoring-publish
+
+on:
+  workflow_call:
+    inputs:
+      oci_repo:
+        description: GHCR OCI repository path (e.g. 'ghcr.io/bendwyer/kubernetes-monitoring').
+        required: true
+        type: string
+    secrets:
+      ghcr_token:
+        description: Token for GHCR authentication (typically secrets.GITHUB_TOKEN).
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Setup Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: 'stable'
+          cache: false
+
+      - name: Install jsonnet tooling
+        run: |
+          go install github.com/google/go-jsonnet/cmd/jsonnet@latest
+          go install github.com/google/go-jsonnet/cmd/jsonnetfmt@latest
+          go install github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb@latest
+
+      - name: Build mixins
+        run: make generate
+
+      - name: Wrap dashboards as ConfigMaps
+        shell: bash
+        run: |
+          for artifact_dir in dashboards_out/*/; do
+            artifact=$(basename "$artifact_dir")
+            mkdir -p "manifests/${artifact}"
+
+            for json_file in "$artifact_dir"*.json; do
+              [ -f "$json_file" ] || continue
+              filename=$(basename "$json_file" .json)
+              export DASHBOARD_NAME=$(echo "$filename" | tr '.' '-' | tr '_' '-' | tr '[:upper:]' '[:lower:]')
+              export DASHBOARD_JSON=$(sed 's/^/    /' "$json_file")
+
+              echo "  ${filename} → ${artifact}"
+              envsubst '${DASHBOARD_NAME} ${DASHBOARD_JSON}' < templates/configmap-dashboard.yaml > "manifests/${artifact}/dashboard-${DASHBOARD_NAME}.yaml"
+            done
+
+            resources=""
+            for f in "manifests/${artifact}"/dashboard-*.yaml; do
+              resources="${resources}  - $(basename "$f")"$'\n'
+            done
+            export RESOURCES="$resources"
+            envsubst '${RESOURCES}' < templates/kustomization.yaml > "manifests/${artifact}/kustomization.yaml"
+          done
+
+      - name: Build publish matrix
+        id: matrix
+        shell: bash
+        run: |
+          # Extract mixin versions from jsonnetfile.json
+          # Maps artifact directory names to their source versions
+          declare -A VERSIONS
+          while IFS= read -r line; do
+            remote=$(echo "$line" | jq -r '.remote')
+            subdir=$(echo "$line" | jq -r '.subdir')
+            version=$(echo "$line" | jq -r '.version' | sed 's/^version-//; s/^v//')
+
+            # Derive artifact name from subdir (last path segment) or repo name
+            if [ -n "$subdir" ]; then
+              name=$(basename "$subdir")
+            else
+              name=$(basename "$remote" .git)
+            fi
+
+            # Normalize names to match artifact directories
+            case "$name" in
+              node-mixin) name="node-exporter-mixin" ;;
+            esac
+
+            VERSIONS[$name]="$version"
+          done < <(jq -c '.dependencies[] | {remote: .source.git.remote, subdir: .source.git.subdir, version: .version}' jsonnetfile.json)
+
+          # Add static versions
+          for key in $(jq -r 'keys[]' static-versions.json); do
+            VERSIONS[$key]=$(jq -r ".[\"$key\"]" static-versions.json)
+          done
+
+          # Build matrix from manifests directories
+          matrix="["
+          first=true
+          for dir in manifests/*/; do
+            artifact=$(basename "$dir")
+            version="${VERSIONS[$artifact]:-0.0.0}"
+            [ "$first" = true ] && first=false || matrix="${matrix},"
+            matrix="${matrix}{\"artifact\":\"${artifact}\",\"version\":\"${version}\"}"
+          done
+          matrix="${matrix}]"
+
+          echo "matrix={\"include\":${matrix}}" >> "$GITHUB_OUTPUT"
+          echo "Matrix: ${matrix}"
+
+      - name: Upload manifests artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: manifests
+          path: manifests/
+
+  publish:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.build.outputs.matrix) }}
+    steps:
+      - name: Download manifests
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: manifests
+          path: manifests/
+
+      - name: Setup Flux CLI
+        uses: controlplaneio-fluxcd/distribution/actions/setup@0e2509238f512b4296cfff86c84a2911e444e87f # v2.8.3
+
+      - name: Login to GHCR
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.ghcr_token }}
+
+      - name: Push OCI artifact
+        uses: controlplaneio-fluxcd/distribution/actions/push@0e2509238f512b4296cfff86c84a2911e444e87f # v2.8.3
+        id: push
+        with:
+          repository: ${{ inputs.oci_repo }}/${{ matrix.artifact }}
+          path: manifests/${{ matrix.artifact }}
+          diff-tag: ${{ matrix.version }}
+
+      - name: Setup cosign
+        if: steps.push.outputs.pushed == 'true'
+        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+
+      - name: Sign artifact
+        if: steps.push.outputs.pushed == 'true'
+        run: cosign sign --yes $DIGEST_URL
+        env:
+          DIGEST_URL: ${{ steps.push.outputs.digest-url }}
