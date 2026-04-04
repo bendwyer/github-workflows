@@ -71,6 +71,10 @@ jobs:
               [ -f "$file" ] || continue
               mkdir -p "manifests/${artifact}"
 
+              # Workaround: replace \. with . in PromQL regex matchers for Prometheus 3.x compatibility.
+              # Upstream issue: https://github.com/kubernetes-monitoring/kubernetes-mixin/issues/1016
+              sed -i 's/\\\././g' "$file"
+
               export RULE_NAME="${artifact}-${type}"
               echo "  ${type} → ${artifact}"
               envsubst '${RULE_NAME}' < templates/prometheusrule.yaml > "manifests/${artifact}/prometheusrule-${type}.yaml"
