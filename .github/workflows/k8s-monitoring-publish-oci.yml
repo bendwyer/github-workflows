@@ -95,8 +95,8 @@ jobs:
           done < <(jq -c '.dependencies[] | {remote: .source.git.remote, subdir: .source.git.subdir, version: .version}' jsonnetfile.json)
 
           # Add static versions
-          for key in $(jq -r 'keys[]' static-versions.json); do
-            VERSIONS[$key]=$(jq -r ".[\"$key\"]" static-versions.json)
+          for key in $(jq -r 'keys[]' dashboards-static/manifest.json); do
+            VERSIONS[$key]=$(jq -r ".[\"$key\"].version" dashboards-static/manifest.json)
           done
 
           # Build matrix from manifests directories
