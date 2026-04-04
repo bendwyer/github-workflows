@@ -58,9 +58,34 @@ jobs:
               envsubst '${DASHBOARD_NAME}' < templates/configmap-dashboard.yaml > "manifests/${artifact}/dashboard-${DASHBOARD_NAME}.yaml"
               sed 's/^/    /' "$json_file" >> "manifests/${artifact}/dashboard-${DASHBOARD_NAME}.yaml"
             done
+          done
 
+      - name: Wrap alerts and rules as PrometheusRules
+        shell: bash
+        run: |
+          for type in alerts rules; do
+            for artifact_dir in "${type}_out"/*/; do
+              [ -d "$artifact_dir" ] || continue
+              artifact=$(basename "$artifact_dir")
+              file="${artifact_dir}${type}.yml"
+              [ -f "$file" ] || continue
+              mkdir -p "manifests/${artifact}"
+
+              export RULE_NAME="${artifact}-${type}"
+              echo "  ${type} → ${artifact}"
+              envsubst '${RULE_NAME}' < templates/prometheusrule.yaml > "manifests/${artifact}/prometheusrule-${type}.yaml"
+              sed 's/^/  /' "$file" >> "manifests/${artifact}/prometheusrule-${type}.yaml"
+            done
+          done
+
+      - name: Generate kustomization.yaml per artifact
+        shell: bash
+        run: |
+          for artifact_dir in manifests/*/; do
+            artifact=$(basename "$artifact_dir")
             resources=""
-            for f in "manifests/${artifact}"/dashboard-*.yaml; do
+            for f in "${artifact_dir}"dashboard-*.yaml "${artifact_dir}"prometheusrule-*.yaml; do
+              [ -f "$f" ] || continue
               resources="${resources}  - $(basename "$f")"$'\n'
             done
             export RESOURCES="$resources"
