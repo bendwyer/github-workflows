@@ -166,7 +166,7 @@ jobs:
         uses: controlplaneio-fluxcd/distribution/actions/setup@0e2509238f512b4296cfff86c84a2911e444e87f # v2.8.3
 
       - name: Login to GHCR
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
