@@ -163,7 +163,7 @@ jobs:
           path: manifests/
 
       - name: Setup Flux CLI
-        uses: controlplaneio-fluxcd/distribution/actions/setup@0e2509238f512b4296cfff86c84a2911e444e87f # v2.8.3
+        uses: controlplaneio-fluxcd/distribution/actions/setup@5ca466af434567cb4416892e0543167230681c76 # v2.8.5
 
       - name: Login to GHCR
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
@@ -173,7 +173,7 @@ jobs:
           password: ${{ secrets.ghcr_token }}
 
       - name: Push OCI artifact
-        uses: controlplaneio-fluxcd/distribution/actions/push@0e2509238f512b4296cfff86c84a2911e444e87f # v2.8.3
+        uses: controlplaneio-fluxcd/distribution/actions/push@5ca466af434567cb4416892e0543167230681c76 # v2.8.5
         id: push
         with:
           repository: ${{ inputs.oci_repo }}/${{ matrix.artifact }}

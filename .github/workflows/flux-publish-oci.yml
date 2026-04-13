@@ -54,7 +54,7 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Setup Flux CLI
-        uses: controlplaneio-fluxcd/distribution/actions/setup@0e2509238f512b4296cfff86c84a2911e444e87f # v2.8.3
+        uses: controlplaneio-fluxcd/distribution/actions/setup@5ca466af434567cb4416892e0543167230681c76 # v2.8.5
 
       - name: Setup cosign
         uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
@@ -69,7 +69,7 @@ jobs:
 
       - name: Push OCI artifact
         if: github.event_name != 'pull_request'
-        uses: controlplaneio-fluxcd/distribution/actions/push@0e2509238f512b4296cfff86c84a2911e444e87f # v2.8.3
+        uses: controlplaneio-fluxcd/distribution/actions/push@5ca466af434567cb4416892e0543167230681c76 # v2.8.5
         id: push
         with:
           repository: ${{ inputs.oci_repo }}${{ matrix.component != '' && format('/{0}', matrix.component) || '' }}
