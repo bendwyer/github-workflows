@@ -86,6 +86,8 @@ jobs:
           # Currently handles:
           #   - installationmedia jointoken — masks the Omni join token
           #   - cluster template inlineManifests[].contents — masks all Secret data values
+          #   - patch files environment[] — masks env-var values whose key name
+          #     contains KEY, TOKEN, SECRET, or AUTH (case-insensitive)
 
           # Mask installation media join tokens
           if [[ -d installationmedia ]]; then
@@ -117,6 +119,33 @@ jobs:
               done
             fi
           done
+
+          # Mask sensitive environment variables from sops-encrypted patch files
+          if [[ -d patches ]]; then
+            find patches -type f -name '*.yaml' 2>/dev/null | while IFS= read -r patch; do
+              grep -q '^sops:' "$patch" 2>/dev/null || continue
+              sops -d "$patch" \
+                | yq '.environment[]' 2>/dev/null \
+                | grep -iE '^[^=]*(KEY|TOKEN|SECRET|AUTH)=' \
+                | cut -d= -f2- \
+                | while IFS= read -r val; do
+                    [[ -n "$val" ]] && echo "::add-mask::$val"
+                  done || true
+            done
+          fi
+
+      - name: Decrypt patches
+        run: |
+          # Decrypt sops-encrypted patch files in place so omnictl can resolve
+          # `file:` references in cluster templates. Mask step above has already
+          # registered sensitive values for log redaction.
+          if [[ -d patches ]]; then
+            find patches -type f -name '*.yaml' 2>/dev/null | while IFS= read -r patch; do
+              grep -q '^sops:' "$patch" 2>/dev/null || continue
+              echo "Decrypting: $patch"
+              sops -d --in-place "$patch"
+            done
+          fi
 
       - name: Validate installation media
         run: |
@@ -212,6 +241,33 @@ jobs:
               done
             fi
           done
+
+          # Mask sensitive environment variables from sops-encrypted patch files
+          if [[ -d patches ]]; then
+            find patches -type f -name '*.yaml' 2>/dev/null | while IFS= read -r patch; do
+              grep -q '^sops:' "$patch" 2>/dev/null || continue
+              sops -d "$patch" \
+                | yq '.environment[]' 2>/dev/null \
+                | grep -iE '^[^=]*(KEY|TOKEN|SECRET|AUTH)=' \
+                | cut -d= -f2- \
+                | while IFS= read -r val; do
+                    [[ -n "$val" ]] && echo "::add-mask::$val"
+                  done || true
+            done
+          fi
+
+      - name: Decrypt patches
+        run: |
+          # Decrypt sops-encrypted patch files in place so omnictl can resolve
+          # `file:` references in cluster templates. Mask step above has already
+          # registered sensitive values for log redaction.
+          if [[ -d patches ]]; then
+            find patches -type f -name '*.yaml' 2>/dev/null | while IFS= read -r patch; do
+              grep -q '^sops:' "$patch" 2>/dev/null || continue
+              echo "Decrypting: $patch"
+              sops -d --in-place "$patch"
+            done
+          fi
 
       - name: Apply machine classes
         run: |
