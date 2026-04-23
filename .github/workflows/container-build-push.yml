@@ -90,7 +90,7 @@ jobs:
         shell: bash
 
       - name: Upload digest
-        uses: actions/upload-artifact@v7.0.0
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: digests-${{ matrix.images }}-${{ matrix.runners == 'ubuntu-24.04' && 'linux-amd64' || 'linux-arm64' }}
           path: ${{ runner.temp }}/digests/*
