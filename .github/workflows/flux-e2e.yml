@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
       - name: Setup Flux CLI
-        uses: controlplaneio-fluxcd/distribution/actions/setup@5ca466af434567cb4416892e0543167230681c76 # v2.8.5
+        uses: controlplaneio-fluxcd/distribution/actions/setup@3f1c0eb61da5f5249ca311b067d17347cd02bc51 # v2.8.6
 
       - name: Setup Kubernetes (KIND)
         uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
