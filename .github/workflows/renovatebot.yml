@@ -30,7 +30,6 @@ jobs:
           private-key: ${{ secrets.gh_app_private_key }}
           permission-contents: write
           permission-issues: write
-          permission-packages: read
           permission-pull-requests: write
           permission-statuses: write
           permission-vulnerability-alerts: read
