@@ -99,6 +99,8 @@ jobs:
       - name: Build publish matrix
         id: matrix
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.ghcr_token }}
         run: |
           # Extract mixin versions from jsonnetfile.json
           # Maps artifact directory names to their source versions
@@ -107,6 +109,17 @@ jobs:
             remote=$(echo "$line" | jq -r '.remote')
             subdir=$(echo "$line" | jq -r '.subdir')
             version=$(echo "$line" | jq -r '.version' | sed 's/^version-//; s/^v//')
+
+            # For SHA-pinned deps (monorepo mixins without upstream semver tags),
+            # convert to YYYY.MM.DD using the upstream commit date so the OCI tag
+            # is semver-coerce friendly for downstream Renovate consumers.
+            if [[ "$version" =~ ^[0-9a-f]{40}$ ]]; then
+              owner_repo=$(echo "$remote" | sed -E 's|https://github\.com/([^/]+/[^/.]+).*|\1|')
+              commit_date=$(gh api "repos/${owner_repo}/commits/${version}" --jq '.commit.committer.date' 2>/dev/null | cut -d'T' -f1 | tr - .)
+              if [ -n "$commit_date" ]; then
+                version="$commit_date"
+              fi
+            fi
 
             # Derive artifact name from subdir (last path segment) or repo name
             if [ -n "$subdir" ]; then
