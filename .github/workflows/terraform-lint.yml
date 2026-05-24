@@ -4,8 +4,8 @@ name: terraform-lint
 on:
   workflow_call:
     inputs:
-      gh_app_id:
-        description: GitHub App ID
+      gh_client_id:
+        description: GitHub App client ID
         required: true
         type: string
       owner:
@@ -29,16 +29,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Generate GitHub App token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app_token
         with:
-          app-id: ${{ inputs.gh_app_id }}
+          client-id: ${{ inputs.gh_client_id }}
           private-key: ${{ secrets.gh_app_private_key }}
           owner: ${{ inputs.owner }}
           repositories: ${{ inputs.repositories }}
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ steps.app_token.outputs.token }}
 
@@ -79,7 +79,7 @@ jobs:
       - fmt
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v4

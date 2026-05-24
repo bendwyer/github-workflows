@@ -4,8 +4,8 @@ name: github-action-promote-major-version
 on:
   workflow_call:
     inputs:
-      gh_app_id:
-        description: GitHub App ID
+      gh_client_id:
+        description: GitHub App client ID
         required: true
         type: string
       owner:
@@ -19,17 +19,17 @@ on:
     secrets:
       gh_app_private_key:
         description: GitHub App private key
-        required: true    
+        required: true
 
 jobs:
   github-action-promote-major-version:
     runs-on: ubuntu-24.04
     steps:
       - name: Generate GitHub App token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app_token
         with:
-          app-id: ${{ inputs.gh_app_id }}
+          client-id: ${{ inputs.gh_client_id }}
           private-key: ${{ secrets.gh_app_private_key }}
           owner: ${{ inputs.owner }}
           repositories: ${{ inputs.repositories }}
