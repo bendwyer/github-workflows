@@ -1,0 +1,75 @@
+---
+name: terraform-test
+
+on:
+  workflow_call:
+    inputs:
+      gh_client_id:
+        description: GitHub App client ID
+        required: true
+        type: string
+      owner:
+        description: GitHub App installation owner. Defaults to repository owner. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped only to the current repository.
+        required: false
+        type: string
+      repositories:
+        description: Comma-separated list of repositories to grant access to. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped only to the current repository.
+        required: false
+        type: string
+      terraform_version:
+        description: Terraform version to install. Defaults to "latest".
+        required: false
+        type: string
+        default: latest
+      working_directory:
+        description: Directory containing the module to test (the dir with `tests/*.tftest.hcl`). Init + test run from here.
+        required: false
+        type: string
+        default: "."
+    secrets:
+      gh_app_private_key:
+        description: GitHub App private key
+        required: true
+
+env:
+  TF_IN_AUTOMATION: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    steps:
+      - name: Generate GitHub App token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app_token
+        with:
+          client-id: ${{ inputs.gh_client_id }}
+          private-key: ${{ secrets.gh_app_private_key }}
+          owner: ${{ inputs.owner }}
+          repositories: ${{ inputs.repositories }}
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ steps.app_token.outputs.token }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+
+      - name: terraform init
+        run: |
+          terraform init \
+            -no-color \
+            -input=false \
+            -backend=false
+        shell: bash
+
+      - name: terraform test
+        run: |
+          terraform test \
+            -no-color
+        shell: bash

@@ -1,0 +1,77 @@
+---
+name: python-test
+
+on:
+  workflow_call:
+    inputs:
+      gh_client_id:
+        description: GitHub App client ID
+        required: true
+        type: string
+      owner:
+        description: GitHub App installation owner. Defaults to repository owner. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped only to the current repository.
+        required: false
+        type: string
+      repositories:
+        description: Comma-separated list of repositories to grant access to. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped only to the current repository.
+        required: false
+        type: string
+      python_version:
+        description: Python version to install. Defaults to "3.11" (matches AWS Lambda's latest pinned-old-provider-supported runtime).
+        required: false
+        type: string
+        default: "3.11"
+      install_command:
+        description: Shell command to install the project's test dependencies. Run from working_directory.
+        required: false
+        type: string
+        default: pip install ".[test]"
+      test_command:
+        description: Shell command to run tests. Run from working_directory.
+        required: false
+        type: string
+        default: pytest
+      working_directory:
+        description: Directory to run install_command and test_command from. Defaults to repo root.
+        required: false
+        type: string
+        default: "."
+    secrets:
+      gh_app_private_key:
+        description: GitHub App private key
+        required: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    steps:
+      - name: Generate GitHub App token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app_token
+        with:
+          client-id: ${{ inputs.gh_client_id }}
+          private-key: ${{ secrets.gh_app_private_key }}
+          owner: ${{ inputs.owner }}
+          repositories: ${{ inputs.repositories }}
+
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ steps.app_token.outputs.token }}
+
+      - name: Setup Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: ${{ inputs.install_command }}
+        shell: bash
+
+      - name: Run tests
+        run: ${{ inputs.test_command }}
+        shell: bash
