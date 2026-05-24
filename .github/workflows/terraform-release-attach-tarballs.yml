@@ -1,0 +1,78 @@
+---
+name: terraform-release-attach-tarballs
+
+on:
+  workflow_call:
+    inputs:
+      gh_client_id:
+        description: GitHub App client ID
+        required: true
+        type: string
+      owner:
+        description: GitHub App installation owner. Defaults to repository owner. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped only to the current repository.
+        required: false
+        type: string
+      repositories:
+        description: Comma-separated list of repositories to grant access to. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped only to the current repository.
+        required: false
+        type: string
+      source_glob:
+        description: Shell glob (evaluated at runtime) matching subdirectories to tarball. Each matched directory becomes one tarball named '<basename>-<release_tag>.tar.gz' with files placed at the archive root.
+        required: true
+        type: string
+    secrets:
+      gh_app_private_key:
+        description: GitHub App private key
+        required: true
+
+jobs:
+  terraform-release-attach-tarballs:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Generate GitHub App token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app_token
+        with:
+          client-id: ${{ inputs.gh_client_id }}
+          private-key: ${{ secrets.gh_app_private_key }}
+          owner: ${{ inputs.owner }}
+          repositories: ${{ inputs.repositories }}
+
+      - name: Checkout repository at release tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Build tarballs
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          GLOB: ${{ inputs.source_glob }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          mkdir -p dist
+          for dir in $GLOB; do
+            [[ -d "$dir" ]] || continue
+            name=$(basename "$dir")
+            tarball="dist/${name}-${TAG}.tar.gz"
+            tar -czf "$tarball" \
+              -C "$dir" \
+              --exclude='.terraform' \
+              --exclude='.terraform.lock.hcl' \
+              --exclude='*.tfvars' \
+              --exclude='*.tfvars.json' \
+              --exclude='*.tfstate' \
+              --exclude='*.tfstate.backup' \
+              .
+            echo "Built $tarball ($(du -h "$tarball" | cut -f1))"
+          done
+          if ! ls dist/*.tar.gz >/dev/null 2>&1; then
+            echo "No tarballs built — source_glob '$GLOB' matched no directories" >&2
+            exit 1
+          fi
+
+      - name: Attach tarballs to release
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" dist/*.tar.gz --clobber
