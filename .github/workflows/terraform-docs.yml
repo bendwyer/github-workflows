@@ -4,8 +4,8 @@ name: terraform-docs
 on:
   workflow_call:
     inputs:
-      gh_app_id:
-        description: GitHub App ID
+      gh_client_id:
+        description: GitHub App client ID
         required: true
         type: string
       owner:
@@ -16,7 +16,7 @@ on:
         description: Path to the README file.
         required: false
         default: README.md
-        type: string        
+        type: string
       repositories:
         description: Comma separated list of repositories to grant access to. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped to only the current repository.
         required: false
@@ -31,10 +31,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Generate GitHub App token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app_token
         with:
-          app-id: ${{ inputs.gh_app_id }}
+          client-id: ${{ inputs.gh_client_id }}
           private-key: ${{ secrets.gh_app_private_key }}
           owner: ${{ inputs.owner }}
           repositories: ${{ inputs.repositories }}
@@ -53,7 +53,7 @@ jobs:
         shell: bash
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
