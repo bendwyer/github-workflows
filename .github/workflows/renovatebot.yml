@@ -9,11 +9,6 @@ on:
         required: false
         type: string
         default: ''
-      gh_app_id:
-        description: GitHub App numeric ID (legacy fallback; used only when gh_client_id is empty).
-        required: false
-        type: string
-        default: ''
       renovate_file:
         description: Path to the Renovate configuration file.
         required: false
@@ -28,31 +23,11 @@ jobs:
   renovate:
     runs-on: ubuntu-24.04
     steps:
-      - name: Validate auth input
-        if: inputs.gh_client_id == '' && inputs.gh_app_id == ''
-        run: |
-          echo "::error::Provide either gh_client_id (preferred) or gh_app_id." >&2
-          exit 1
-
-      - name: Generate GitHub App token (client-id)
-        if: inputs.gh_client_id != ''
+      - name: Generate GitHub App token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        id: token_via_client
+        id: app_token
         with:
           client-id: ${{ inputs.gh_client_id }}
-          private-key: ${{ secrets.gh_app_private_key }}
-          permission-contents: write
-          permission-issues: write
-          permission-pull-requests: write
-          permission-statuses: write
-          permission-vulnerability-alerts: read
-
-      - name: Generate GitHub App token (app-id fallback)
-        if: inputs.gh_client_id == '' && inputs.gh_app_id != ''
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        id: token_via_app
-        with:
-          app-id: ${{ inputs.gh_app_id }}
           private-key: ${{ secrets.gh_app_private_key }}
           permission-contents: write
           permission-issues: write
@@ -67,7 +42,7 @@ jobs:
         uses: renovatebot/github-action@693b9ef15eec82123529a37c782242f091365961 # v46.1.14
         with:
           configurationFile: ${{ inputs.renovate_file }}
-          token: ${{ steps.token_via_client.outputs.token || steps.token_via_app.outputs.token }}
+          token: ${{ steps.app_token.outputs.token }}
         env:
           RENOVATE_PLATFORM_COMMIT: 'true'
           LOG_LEVEL: 'debug'
