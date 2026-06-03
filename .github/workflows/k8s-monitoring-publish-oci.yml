@@ -131,6 +131,7 @@ jobs:
             # Normalize names to match artifact directories
             case "$name" in
               node-mixin) name="node-exporter-mixin" ;;
+              snmp-observ-lib) name="snmp-mixin" ;;
             esac
 
             VERSIONS[$name]="$version"
