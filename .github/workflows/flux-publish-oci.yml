@@ -78,7 +78,16 @@ jobs:
 
       - name: Sign artifact
         if: github.event_name != 'pull_request' && steps.push.outputs.pushed == 'true'
-        run: cosign sign --yes $DIGEST_URL
+        run: |
+          for attempt in 1 2 3; do
+            if cosign sign --yes "$DIGEST_URL"; then
+              exit 0
+            fi
+            echo "::warning::cosign sign attempt ${attempt} failed; retrying in $((attempt * 10))s"
+            sleep $((attempt * 10))
+          done
+          echo "::error::cosign sign failed after 3 attempts"
+          exit 1
         env:
           DIGEST_URL: ${{ steps.push.outputs.digest-url }}
 
