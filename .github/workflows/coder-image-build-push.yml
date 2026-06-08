@@ -1,0 +1,234 @@
+---
+# Build and publish multi-arch container images from a directory of Dockerfiles.
+#
+# Combines:
+#   - flux-publish-oci style auto-discovery (no filters file): each subdir of
+#     `images_root` is an image, discovered with `ls`.
+#   - container-build-push style multi-arch: native amd64 + arm64 runners build
+#     per-arch by digest, then a merge job creates the manifest list.
+#   - k8s-monitoring style CalVer tagging: `YYYY.MM.DD` (build date) so
+#     downstream Renovate consumers can pin the digest and track new dates.
+#
+# Detection:
+#   schedule / workflow_dispatch  -> all images
+#   push / pull_request           -> only images whose dir changed,
+#                                    plus ALL images if `base_image` changed
+#                                    (cascade for derived images).
+# pull_request builds but never pushes/publishes.
+
+on:
+  workflow_call:
+    inputs:
+      images_root:
+        description: Directory containing one subdirectory per image (each with a Dockerfile).
+        required: false
+        type: string
+        default: images
+      base_image:
+        description: Name of the foundational image; a change to it rebuilds every image.
+        required: false
+        type: string
+        default: coder-base
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    runs-on: ubuntu-24.04
+    outputs:
+      images: ${{ steps.detect.outputs.images }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Detect images
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="${{ inputs.images_root }}"
+
+          all() { ls -d "${root}"/*/ 2>/dev/null | xargs -n1 basename | jq -R . | jq -sc .; }
+
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            images=$(all)
+          else
+            if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+              base="${{ github.event.pull_request.base.sha }}"
+            else
+              base="${{ github.event.before }}"
+            fi
+
+            # New branch / unknown base -> can't diff, build everything.
+            if [[ -z "${base}" || "${base}" == "0000000000000000000000000000000000000000" ]]; then
+              images=$(all)
+            else
+              changed=$(git diff --name-only "${base}" "${{ github.sha }}" -- "${root}/" \
+                        | awk -F/ -v r="${root}" '$1==r {print $2}' | sort -u)
+              # Cascade: a base-image change rebuilds all derived images.
+              if echo "${changed}" | grep -qx "${{ inputs.base_image }}"; then
+                images=$(all)
+              else
+                images=$(printf '%s\n' "${changed}" | grep -v '^$' | jq -R . | jq -sc . || echo '[]')
+                [[ -z "${images}" ]] && images='[]'
+              fi
+            fi
+          fi
+
+          echo "images=${images}" >> "${GITHUB_OUTPUT}"
+          echo "Images: ${images}"
+
+  build:
+    needs: detect
+    if: needs.detect.outputs.images != '[]'
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.detect.outputs.images) }}
+        runner:
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
+    env:
+      PUSH: ${{ github.event_name != 'pull_request' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Normalize platform
+        id: platform
+        shell: bash
+        run: |
+          case "${{ runner.arch }}" in
+            X64)   arch=amd64 ;;
+            ARM64) arch=arm64 ;;
+            *)     echo "unsupported arch: ${{ runner.arch }}" >&2; exit 1 ;;
+          esac
+          echo "spec=linux-${arch}" >> "${GITHUB_OUTPUT}"
+
+      - name: Image reference (lowercase)
+        id: image
+        shell: bash
+        run: echo "ref=ghcr.io/${GITHUB_REPOSITORY,,}/${{ matrix.image }}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Login to GHCR
+        if: env.PUSH == 'true'
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ inputs.images_root }}/${{ matrix.image }}
+          provenance: false
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ steps.platform.outputs.spec }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ steps.platform.outputs.spec }}
+          outputs: type=image,name=${{ steps.image.outputs.ref }},push-by-digest=${{ env.PUSH }},name-canonical=true,push=${{ env.PUSH }}
+
+      - name: Export digest
+        if: env.PUSH == 'true'
+        shell: bash
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          test -n "${DIGEST}" # fail loudly if the build produced no digest
+          mkdir -p "${{ runner.temp }}/digests"
+          touch "${{ runner.temp }}/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        if: env.PUSH == 'true'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: digest-${{ matrix.image }}-${{ steps.platform.outputs.spec }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs:
+      - detect
+      - build
+    if: needs.detect.outputs.images != '[]' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.detect.outputs.images) }}
+    steps:
+      - name: Image reference (lowercase)
+        id: image
+        shell: bash
+        run: echo "ref=ghcr.io/${GITHUB_REPOSITORY,,}/${{ matrix.image }}" >> "${GITHUB_OUTPUT}"
+
+      - name: CalVer date
+        id: date
+        shell: bash
+        run: echo "calver=$(date -u +%Y.%m.%d)" >> "${GITHUB_OUTPUT}"
+
+      - name: Download digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-${{ matrix.image }}-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Login to GHCR
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        with:
+          images: ${{ steps.image.outputs.ref }}
+          tags: |
+            type=raw,value=${{ steps.date.outputs.calver }}
+            type=sha,format=long
+          labels: |
+            org.opencontainers.image.title=${{ matrix.image }}
+          flavor: |
+            latest=false
+
+      - name: Create manifest list and push
+        shell: bash
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          IMAGE: ${{ steps.image.outputs.ref }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          digest_files=(*)
+          if (( ${#digest_files[@]} == 0 )); then
+            echo "ERROR: no digest files for ${{ matrix.image }}" >&2
+            exit 1
+          fi
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "${DOCKER_METADATA_OUTPUT_JSON}") \
+            "${digest_files[@]/#/${IMAGE}@sha256:}"
+
+      - name: Inspect
+        shell: bash
+        run: docker buildx imagetools inspect "${{ steps.image.outputs.ref }}:${{ steps.date.outputs.calver }}"
