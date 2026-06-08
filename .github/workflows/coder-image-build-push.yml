@@ -82,6 +82,7 @@ jobs:
           echo "Images: ${images}"
 
   build:
+    name: build ${{ matrix.image }} (${{ matrix.platform }})
     needs: detect
     if: needs.detect.outputs.images != '[]'
     runs-on: ${{ matrix.runner }}
@@ -92,25 +93,26 @@ jobs:
       fail-fast: false
       matrix:
         image: ${{ fromJSON(needs.detect.outputs.images) }}
-        runner:
-          - ubuntu-24.04
-          - ubuntu-24.04-arm
+        platform:
+          - linux/amd64
+          - linux/arm64
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
     env:
       PUSH: ${{ github.event_name != 'pull_request' }}
     steps:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
-      - name: Normalize platform
+      - name: Platform spec
         id: platform
         shell: bash
-        run: |
-          case "${{ runner.arch }}" in
-            X64)   arch=amd64 ;;
-            ARM64) arch=arm64 ;;
-            *)     echo "unsupported arch: ${{ runner.arch }}" >&2; exit 1 ;;
-          esac
-          echo "spec=linux-${arch}" >> "${GITHUB_OUTPUT}"
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: echo "spec=${PLATFORM//\//-}" >> "${GITHUB_OUTPUT}"
 
       - name: Image reference (lowercase)
         id: image
@@ -133,6 +135,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: ${{ inputs.images_root }}/${{ matrix.image }}
+          platforms: ${{ matrix.platform }}
           provenance: false
           cache-from: type=gha,scope=${{ matrix.image }}-${{ steps.platform.outputs.spec }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ steps.platform.outputs.spec }}
