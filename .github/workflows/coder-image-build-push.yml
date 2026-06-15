@@ -71,9 +71,10 @@ jobs:
               # Cascade: a base-image change rebuilds all derived images.
               if echo "${changed}" | grep -qx "${{ inputs.base_image }}"; then
                 images=$(all)
+              elif [[ -n "${changed}" ]]; then
+                images=$(printf '%s\n' "${changed}" | jq -R . | jq -sc .)
               else
-                images=$(printf '%s\n' "${changed}" | grep -v '^$' | jq -R . | jq -sc . || echo '[]')
-                [[ -z "${images}" ]] && images='[]'
+                images='[]'
               fi
             fi
           fi
