@@ -16,6 +16,11 @@ on:
         description: Comma separated list of repositories to grant access to. If 'owner' is set and 'repositories' is empty, access will be scoped to all repositories in the provided repository owner's installation. If 'owner' and 'repositories' are empty, access will be scoped to only the current repository.
         required: false
         type: string
+      working_directory:
+        description: Directory to run terraform init/validate in, relative to the repo root. Defaults to the repo root.
+        required: false
+        type: string
+        default: "."
     secrets:
       gh_app_private_key:
         description: GitHub App private key
@@ -85,6 +90,7 @@ jobs:
         uses: hashicorp/setup-terraform@v4
 
       - name: terraform init
+        working-directory: ${{ inputs.working_directory }}
         run: |
           terraform init \
             -no-color \
@@ -93,6 +99,7 @@ jobs:
         shell: bash
 
       - name: terraform validate
+        working-directory: ${{ inputs.working_directory }}
         run: |
           terraform validate \
             -no-color
