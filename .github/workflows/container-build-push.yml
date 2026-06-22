@@ -22,7 +22,7 @@ jobs:
       images: ${{ steps.filter.outputs.changes || steps.all.outputs.images }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Get all images for scheduled/manual runs
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -54,7 +54,7 @@ jobs:
         images: ${{ fromJSON(needs.changes.outputs.images) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Docker metadata
         id: meta
@@ -108,7 +108,7 @@ jobs:
         images: ${{ fromJSON(needs.changes.outputs.images) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Download digests
         uses: actions/download-artifact@v8.0.1
