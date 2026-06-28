@@ -1,0 +1,74 @@
+---
+name: windmill-sync
+
+# Deploy a Windmill workspace-as-code repo to a Windmill instance reachable over
+# a tailnet. Joins an ephemeral Tailscale node, then runs `wmill sync push`.
+# One-way: git is the source of truth; the instance is never read back. PRs
+# validate with --dry-run; merges deploy. What gets synced is controlled by the
+# calling repo's wmill.yaml.
+
+on:
+  workflow_call:
+    inputs:
+      workspace:
+        description: Target Windmill workspace id.
+        required: true
+        type: string
+      base_url:
+        description: Base URL of the target Windmill instance (e.g. https://windmill.example.com/).
+        required: true
+        type: string
+      dry_run:
+        description: Validate only (wmill sync push --dry-run) instead of deploying.
+        required: false
+        type: boolean
+        default: false
+      ts_oauth_client_id:
+        description: Tailscale OAuth client ID for the ephemeral CI node.
+        required: true
+        type: string
+      ts_tag:
+        description: Tailscale ACL tag applied to the ephemeral CI node.
+        required: false
+        type: string
+        default: tag:github
+      windmill_cli_version:
+        description: windmill-cli npm version to install (override to pin if needed).
+        required: false
+        type: string
+        default: latest
+    secrets:
+      ts_oauth_secret:
+        description: Tailscale OAuth client secret.
+        required: true
+      wmill_token:
+        description: Windmill user token with write access to the workspace.
+        required: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Connect to tailnet
+        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4.1.2
+        with:
+          oauth-client-id: ${{ inputs.ts_oauth_client_id }}
+          oauth-secret: ${{ secrets.ts_oauth_secret }}
+          tags: ${{ inputs.ts_tag }}
+
+      - name: Push to Windmill
+        env:
+          WMILL_TOKEN: ${{ secrets.wmill_token }}
+        run: |
+          npm install -g windmill-cli@${{ inputs.windmill_cli_version }}
+          mode="--yes"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            mode="--dry-run"
+          fi
+          wmill sync push $mode \
+            --workspace ${{ inputs.workspace }} \
+            --base-url ${{ inputs.base_url }} \
+            --token "$WMILL_TOKEN"
