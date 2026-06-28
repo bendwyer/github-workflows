@@ -2,7 +2,8 @@
 name: windmill-sync
 
 # Deploy a Windmill workspace-as-code repo to a Windmill instance reachable over
-# a tailnet. Joins an ephemeral Tailscale node, then runs `wmill sync push`.
+# a tailnet. Joins an ephemeral Tailscale node via workload identity federation
+# (GitHub OIDC, no stored Tailscale secret), then runs `wmill sync push`.
 # One-way: git is the source of truth; the instance is never read back. PRs
 # validate with --dry-run; merges deploy. What gets synced is controlled by the
 # calling repo's wmill.yaml.
@@ -23,8 +24,12 @@ on:
         required: false
         type: boolean
         default: false
-      ts_oauth_client_id:
-        description: Tailscale OAuth client ID for the ephemeral CI node.
+      ts_client_id:
+        description: Tailscale workload-identity-federation client ID (non-secret).
+        required: true
+        type: string
+      ts_audience:
+        description: Tailscale workload-identity-federation audience (non-secret).
         required: true
         type: string
       ts_tag:
@@ -38,9 +43,6 @@ on:
         type: string
         default: latest
     secrets:
-      ts_oauth_secret:
-        description: Tailscale OAuth client secret.
-        required: true
       wmill_token:
         description: Windmill user token with write access to the workspace.
         required: true
@@ -48,6 +50,10 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      # Required so the action can mint a GitHub OIDC token for Tailscale WIF.
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
@@ -55,8 +61,8 @@ jobs:
       - name: Connect to tailnet
         uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4.1.2
         with:
-          oauth-client-id: ${{ inputs.ts_oauth_client_id }}
-          oauth-secret: ${{ secrets.ts_oauth_secret }}
+          oauth-client-id: ${{ inputs.ts_client_id }}
+          audience: ${{ inputs.ts_audience }}
           tags: ${{ inputs.ts_tag }}
 
       - name: Push to Windmill
