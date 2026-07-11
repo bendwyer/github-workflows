@@ -170,9 +170,15 @@ jobs:
             fi
 
             echo "Validating cluster: $cluster_name"
-            pushd "$cluster_dir" > /dev/null
-            sops -d cluster.yaml | omnictl cluster template validate -f /dev/stdin
-            popd > /dev/null
+            # omnictl v1.9+ needs a real template file to resolve `file:` patch
+            # refs; decrypt to a private temp file, never leaving plaintext behind.
+            tmpname="cluster.decrypted.$$.yaml"
+            tmp="${cluster_dir}${tmpname}"
+            trap 'rm -f "$tmp"' EXIT
+            ( umask 077; sops -d "${cluster_dir}cluster.yaml" > "$tmp" )
+            ( cd "$cluster_dir" && omnictl cluster template validate -f "$tmpname" --allowed-dir ../../ )
+            rm -f "$tmp"
+            trap - EXIT
           done
 
   sync:
@@ -327,13 +333,17 @@ jobs:
             fi
 
             echo "Syncing cluster: $cluster_name"
-            pushd "$cluster_dir" > /dev/null
-
+            # omnictl v1.9+ needs a real template file to resolve `file:` patch
+            # refs; decrypt to a private temp file, never leaving plaintext behind.
+            tmpname="cluster.decrypted.$$.yaml"
+            tmp="${cluster_dir}${tmpname}"
+            trap 'rm -f "$tmp"' EXIT
+            ( umask 077; sops -d "${cluster_dir}cluster.yaml" > "$tmp" )
             if [[ "$dry_run" == "true" ]]; then
-              sops -d cluster.yaml | omnictl cluster template sync -f /dev/stdin --dry-run
+              ( cd "$cluster_dir" && omnictl cluster template sync -f "$tmpname" --allowed-dir ../../ --dry-run )
             else
-              sops -d cluster.yaml | omnictl cluster template sync -f /dev/stdin
+              ( cd "$cluster_dir" && omnictl cluster template sync -f "$tmpname" --allowed-dir ../../ )
             fi
-
-            popd > /dev/null
+            rm -f "$tmp"
+            trap - EXIT
           done
