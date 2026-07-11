@@ -48,7 +48,7 @@ jobs:
           sudo mv omnictl /usr/local/bin/
 
       - name: Install Helm and Helmfile
-        uses: helmfile/helmfile-action@daefb3e1fa5a91b7a88d30870d20da4896944818 # v2.4.5
+        uses: helmfile/helmfile-action@1f44bcb43e5fb17ecb2685d8b6081ec5f6aa5fcf # v2.4.7
         with:
           helmfile-args: version
 
