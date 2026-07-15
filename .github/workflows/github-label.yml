@@ -52,7 +52,7 @@ jobs:
         shell: bash
 
       - name: Apply category label to PR
-        uses: release-drafter/release-drafter@v6
+        uses: release-drafter/release-drafter@v7
         with:
           disable-autolabeler: false
           disable-releaser: true
