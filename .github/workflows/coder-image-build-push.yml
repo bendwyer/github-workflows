@@ -6,8 +6,9 @@
 #     `images_root` is an image, discovered with `ls`.
 #   - container-build-push style multi-arch: native amd64 + arm64 runners build
 #     per-arch by digest, then a merge job creates the manifest list.
-#   - k8s-monitoring style CalVer tagging: `YYYY.MM.DD` (build date) so
-#     downstream Renovate consumers can pin the digest and track new dates.
+#   - CalVer tagging: `YYYY.MM.DD` (build date) so downstream Renovate consumers
+#     can pin the digest and track new dates. CalVer `MM`/`DD`, not `0M`/`0D`:
+#     leading zeros are invalid semver and `semver-coerced` silently skips them.
 #
 # Detection:
 #   schedule / workflow_dispatch  -> all images
@@ -184,7 +185,7 @@ jobs:
       - name: CalVer date
         id: date
         shell: bash
-        run: echo "calver=$(date -u +%Y.%m.%d)" >> "${GITHUB_OUTPUT}"
+        run: echo "calver=$(date -u +%Y.%-m.%-d)" >> "${GITHUB_OUTPUT}"
 
       - name: Download digests
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
