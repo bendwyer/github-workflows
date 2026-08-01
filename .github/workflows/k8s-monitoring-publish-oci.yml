@@ -179,7 +179,7 @@ jobs:
           path: manifests/
 
       - name: Setup Flux CLI
-        uses: controlplaneio-fluxcd/distribution/actions/setup@001776bbde2abbcc6c4f6b046412dee54721b0d2 # v2.9.2
+        uses: controlplaneio-fluxcd/distribution/actions/setup@4666968c917f741e9c92b5a21bc4e7cb98f8158f # v2.9.3
 
       - name: Login to GHCR
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
