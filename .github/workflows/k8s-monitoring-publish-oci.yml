@@ -111,13 +111,15 @@ jobs:
             version=$(echo "$line" | jq -r '.version' | sed 's/^version-//; s/^v//')
 
             # For SHA-pinned deps (monorepo mixins without upstream semver tags),
-            # convert to YYYY.MM.DD using the upstream commit date so the OCI tag
-            # is semver-coerce friendly for downstream Renovate consumers.
+            # convert to CalVer `YYYY.MM.DD` using the upstream commit date.
+            # CalVer `MM`/`DD`, not `0M`/`0D`: leading zeros are invalid semver, so
+            # a padded tag is unversioned to `semver-coerced` and downstream
+            # Renovate silently never bumps it.
             if [[ "$version" =~ ^[0-9a-f]{40}$ ]]; then
               owner_repo=$(echo "$remote" | sed -E 's|https://github\.com/([^/]+/[^/.]+).*|\1|')
-              commit_date=$(gh api "repos/${owner_repo}/commits/${version}" --jq '.commit.committer.date' 2>/dev/null | cut -d'T' -f1 | tr - .)
+              commit_date=$(gh api "repos/${owner_repo}/commits/${version}" --jq '.commit.committer.date' 2>/dev/null | cut -d'T' -f1)
               if [ -n "$commit_date" ]; then
-                version="$commit_date"
+                version=$(date -d "$commit_date" +%Y.%-m.%-d)
               fi
             fi
 
