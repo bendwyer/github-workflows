@@ -189,7 +189,7 @@ jobs:
           password: ${{ secrets.ghcr_token }}
 
       - name: Push OCI artifact
-        uses: controlplaneio-fluxcd/distribution/actions/push@4666968c917f741e9c92b5a21bc4e7cb98f8158f # v2.9.3
+        uses: controlplaneio-fluxcd/distribution/actions/push@87c8df4dc78c1c0f614ec91e6736169d2bc57e16 # v2.9.4
         id: push
         with:
           repository: ${{ inputs.oci_repo }}/${{ matrix.artifact }}
