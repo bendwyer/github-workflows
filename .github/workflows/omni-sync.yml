@@ -171,11 +171,16 @@ jobs:
 
             echo "Validating cluster: $cluster_name"
             # omnictl v1.9+ needs a real template file to resolve `file:` patch
-            # refs; decrypt to a private temp file, never leaving plaintext behind.
+            # refs; stage a private temp copy, never leaving plaintext behind.
+            # A template holding no secrets need not be encrypted, so copy it as-is.
             tmpname="cluster.decrypted.$$.yaml"
             tmp="${cluster_dir}${tmpname}"
             trap 'rm -f "$tmp"' EXIT
-            ( umask 077; sops -d "${cluster_dir}cluster.yaml" > "$tmp" )
+            if grep -q '^sops:' "${cluster_dir}cluster.yaml"; then
+              ( umask 077; sops -d "${cluster_dir}cluster.yaml" > "$tmp" )
+            else
+              ( umask 077; cp "${cluster_dir}cluster.yaml" "$tmp" )
+            fi
             ( cd "$cluster_dir" && omnictl cluster template validate -f "$tmpname" --allowed-dir ../../ )
             rm -f "$tmp"
             trap - EXIT
@@ -334,11 +339,16 @@ jobs:
 
             echo "Syncing cluster: $cluster_name"
             # omnictl v1.9+ needs a real template file to resolve `file:` patch
-            # refs; decrypt to a private temp file, never leaving plaintext behind.
+            # refs; stage a private temp copy, never leaving plaintext behind.
+            # A template holding no secrets need not be encrypted, so copy it as-is.
             tmpname="cluster.decrypted.$$.yaml"
             tmp="${cluster_dir}${tmpname}"
             trap 'rm -f "$tmp"' EXIT
-            ( umask 077; sops -d "${cluster_dir}cluster.yaml" > "$tmp" )
+            if grep -q '^sops:' "${cluster_dir}cluster.yaml"; then
+              ( umask 077; sops -d "${cluster_dir}cluster.yaml" > "$tmp" )
+            else
+              ( umask 077; cp "${cluster_dir}cluster.yaml" "$tmp" )
+            fi
             if [[ "$dry_run" == "true" ]]; then
               ( cd "$cluster_dir" && omnictl cluster template sync -f "$tmpname" --allowed-dir ../../ --dry-run )
             else
