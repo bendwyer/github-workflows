@@ -1,0 +1,52 @@
+---
+name: flux-mirror-sync
+
+on:
+  workflow_call:
+    inputs:
+      config_path:
+        description: Path to the flux-mirror config file.
+        required: false
+        type: string
+        default: ./flux-mirror.yaml
+      mirror_version:
+        description: Flux Mirror CLI version (e.g. 'v0.8.0'). Pin in the caller so a dependency bot can track it; 'latest' resolves at run time.
+        required: false
+        type: string
+        default: latest
+      dry_run:
+        description: Plan the sync and report would-copy/would-overwrite without writing to the destination.
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      ghcr_token:
+        description: Token for GHCR authentication (typically secrets.GITHUB_TOKEN).
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+  attestations: read # gh attestation verify on the CLI release
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Flux Mirror CLI
+        uses: fluxcd/flux-mirror/actions/setup@a1ece1be0c3c52dae76137dfa0a4039c85e2afd8 # v0.8.0
+        with:
+          version: ${{ inputs.mirror_version }}
+
+      # Exit 2 is drift: a tag exists at the destination with a different digest
+      # than the source, which means upstream republished an immutable version.
+      - name: Sync
+        run: |
+          flux-mirror sync "${CONFIG_PATH}" --no-progress ${DRY_RUN:+--dry-run}
+        env:
+          CONFIG_PATH: ${{ inputs.config_path }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          GHCR_TOKEN: ${{ secrets.ghcr_token }}
