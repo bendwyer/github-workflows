@@ -19,6 +19,11 @@ on:
         required: false
         type: boolean
         default: false
+      overwrite:
+        description: Re-push drifted tags instead of skipping them. Intended for a one-off dispatch after verifying the republished content, not for the schedule.
+        required: false
+        type: boolean
+        default: false
     secrets:
       ghcr_token:
         description: Token for GHCR authentication (typically secrets.GITHUB_TOKEN).
@@ -52,9 +57,11 @@ jobs:
 
       # Exit 2 is drift: a tag exists at the destination with a different digest
       # than the source, which means upstream republished an immutable version.
+      # --overwrite re-pushes those tags to accept the republished content.
       - name: Sync
         run: |
-          flux-mirror sync "${CONFIG_PATH}" --no-progress ${DRY_RUN:+--dry-run}
+          flux-mirror sync "${CONFIG_PATH}" --no-progress ${DRY_RUN:+--dry-run} ${OVERWRITE:+--overwrite}
         env:
           CONFIG_PATH: ${{ inputs.config_path }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          OVERWRITE: ${{ inputs.overwrite && '1' || '' }}
