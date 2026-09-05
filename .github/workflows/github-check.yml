@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check status of needed jobs and pass/fail
-        uses: re-actors/alls-green@v1.2.2
+        uses: re-actors/alls-green@v1.3.0
         with:
           allowed-skips: ${{ inputs.allowed_skips }}
           jobs: ${{ inputs.jobs }}
