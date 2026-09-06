@@ -45,8 +45,8 @@ jobs:
       - changes
     if: needs.changes.outputs.images != '' && toJson(fromJson(needs.changes.outputs.images)) != '[]'
     runs-on: ${{ matrix.runners }}
-    continue-on-error: true
     strategy:
+      fail-fast: false
       matrix:
         runners:
           - ubuntu-24.04
@@ -101,7 +101,9 @@ jobs:
     needs:
       - build
       - changes
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: >-
+      !cancelled() && needs.changes.result == 'success'
+      && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
     runs-on: ubuntu-24.04
     strategy:
       # One image failing to resolve its version must not cancel the manifest
