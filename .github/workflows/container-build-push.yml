@@ -103,6 +103,7 @@ jobs:
       - changes
     if: >-
       !cancelled() && needs.changes.result == 'success'
+      && needs.changes.outputs.images != '' && toJson(fromJson(needs.changes.outputs.images)) != '[]'
       && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
     runs-on: ubuntu-24.04
     strategy:
