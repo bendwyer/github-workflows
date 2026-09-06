@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       images: ${{ steps.filter.outputs.changes || steps.all.outputs.images }}
+      versions: ${{ steps.versions.outputs.versions }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
@@ -39,6 +40,32 @@ jobs:
         id: filter
         with:
           filters: ${{ inputs.filter_file_path }}
+
+      # Resolved once and consumed by both build and merge. Resolving in each
+      # job separately let an upstream release land between them and tag the
+      # image with a version it does not contain.
+      - name: Resolve image versions
+        id: versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          images='${{ steps.filter.outputs.changes || steps.all.outputs.images }}'
+          versions='{}'
+          for image in $(jq -r '.[]?' <<< "${images:-[]}"); do
+            folder="${{ inputs.images_root_folder }}${image}"
+            if [[ -f "${folder}/get-version.sh" ]]; then
+              version=$(cd "${folder}" && bash get-version.sh)
+            else
+              version=main
+            fi
+            if [[ -z "$version" || "$version" == "null" ]]; then
+              echo "::error::get-version.sh for ${image} returned '${version}'"
+              exit 1
+            fi
+            versions=$(jq -c --arg i "$image" --arg v "$version" '. + {($i): $v}' <<< "$versions")
+          done
+          echo "versions=${versions}" >> $GITHUB_OUTPUT
+        shell: bash
 
   build:
     needs:
@@ -77,6 +104,8 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: ${{ inputs.images_root_folder }}${{ matrix.images }}
+          build-args: |
+            VERSION=${{ fromJSON(needs.changes.outputs.versions)[matrix.images] }}
           labels: ${{ steps.meta.outputs.labels }}
           tags: ghcr.io/${{ github.repository }}/${{ matrix.images }}
           provenance: false
@@ -132,34 +161,16 @@ jobs:
 
       - name: Get version for image
         id: version
-        # get-version.sh scripts that query api.github.com are rate limited to
-        # 60/hour per runner IP unauthenticated, which is shared across all
-        # hosted runners. Scripts that read GH_TOKEN get the repo's 1000/hour.
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [[ -f "${{ inputs.images_root_folder }}${{ matrix.images }}/get-version.sh" ]]; then
-            VERSION=$(cd "${{ inputs.images_root_folder }}${{ matrix.images }}" && bash get-version.sh)
+          VERSION='${{ fromJSON(needs.changes.outputs.versions)[matrix.images] }}'
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-            # A script that half-fails can yield an empty or literal "null"
-            # version, which would otherwise be published as an image tag.
-            if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
-              echo "::error::get-version.sh for ${{ matrix.images }} returned '$VERSION'"
-              exit 1
-            fi
-
+          if [[ "$VERSION" != "main" ]]; then
             # Split version into components
             IFS='.' read -ra PARTS <<< "$VERSION"
-            MAJOR=${PARTS[0]}
-            MINOR=${PARTS[1]}
-            PATCH=${PARTS[2]}
-
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
-            echo "major=$MAJOR" >> $GITHUB_OUTPUT
-            echo "minor=$MINOR" >> $GITHUB_OUTPUT
-            echo "patch=$PATCH" >> $GITHUB_OUTPUT
-          else
-            echo "version=main" >> $GITHUB_OUTPUT
+            echo "major=${PARTS[0]}" >> $GITHUB_OUTPUT
+            echo "minor=${PARTS[1]}" >> $GITHUB_OUTPUT
+            echo "patch=${PARTS[2]}" >> $GITHUB_OUTPUT
           fi
         shell: bash
 
