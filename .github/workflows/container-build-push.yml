@@ -104,6 +104,9 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
     strategy:
+      # One image failing to resolve its version must not cancel the manifest
+      # push for every other image in the matrix.
+      fail-fast: false
       matrix:
         images: ${{ fromJSON(needs.changes.outputs.images) }}
     steps:
@@ -126,9 +129,21 @@ jobs:
 
       - name: Get version for image
         id: version
+        # get-version.sh scripts that query api.github.com are rate limited to
+        # 60/hour per runner IP unauthenticated, which is shared across all
+        # hosted runners. Scripts that read GH_TOKEN get the repo's 1000/hour.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [[ -f "${{ inputs.images_root_folder }}${{ matrix.images }}/get-version.sh" ]]; then
             VERSION=$(cd "${{ inputs.images_root_folder }}${{ matrix.images }}" && bash get-version.sh)
+
+            # A script that half-fails can yield an empty or literal "null"
+            # version, which would otherwise be published as an image tag.
+            if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
+              echo "::error::get-version.sh for ${{ matrix.images }} returned '$VERSION'"
+              exit 1
+            fi
 
             # Split version into components
             IFS='.' read -ra PARTS <<< "$VERSION"
