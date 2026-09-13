@@ -1,58 +1,105 @@
 ---
+# Build and publish multi-arch container images from a directory of Dockerfiles.
+#
+# Each subdirectory of images_root is one image, so that tree is the inventory.
+# Deriving the list from it rather than declaring it separately means a new
+# image cannot be left out and silently never built. An image may carry a
+# get-version.sh that prints its version; without one it is tagged "main".
+#
+# Which images are built:
+#   schedule, workflow_dispatch    every image
+#   push, pull_request             the images whose directory changed, or every
+#                                  image when the base commit cannot be read,
+#                                  as on the first push to a new repository
+#
+# A version is resolved once and shared by the build and merge jobs. Resolving
+# it separately in each let an upstream release land between them and tag an
+# image with a version it does not contain.
+#
+# pull_request builds without pushing. Digests are pushed and the manifest list
+# and tags created only on push to main, schedule and workflow_dispatch.
+#
+# The images root may be empty or absent, which yields an empty image list. All
+# three matrix jobs guard on that, both because there is nothing to do and
+# because a matrix over an empty list errors the run. A calling workflow can
+# therefore gate on this one in a repository that has no images yet.
+#
+# One image failing must not cancel its siblings, hence fail-fast: false on the
+# build and merge matrices.
+
 name: container-build-push
 
 on:
   workflow_call:
     inputs:
-      filter_file_path:
-        description: Path to YAML file populated with filters.
+      images_root:
+        description: Directory containing one subdirectory per image (each with a Dockerfile).
         required: false
-        default: .github/filters.yml
-        type: string
-      images_root_folder:
-        description: Root folder where images are stored. Must include trailing slash.
-        required: false
-        default: images/
+        default: images
         type: string
 
 jobs:
   changes:
     runs-on: ubuntu-24.04
     outputs:
-      images: ${{ steps.filter.outputs.changes || steps.all.outputs.images }}
+      images: ${{ steps.detect.outputs.images }}
       versions: ${{ steps.versions.outputs.versions }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
 
-      - name: Get all images for scheduled/manual runs
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        id: all
+      - name: Detect images
+        id: detect
         run: |
-          # Extract all keys from filters.yml and format as JSON array
-          images=$(yq eval 'keys' ${{ inputs.filter_file_path }} | yq eval -o=json '.' | jq -c '.')
-          echo "images=${images}" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          root="${{ inputs.images_root }}"
+          root="${root%/}"
+
+          shopt -s nullglob
+
+          all() {
+            local dirs=("${root}"/*/)
+            ((${#dirs[@]})) || { printf '[]'; return; }
+            printf '%s\n' "${dirs[@]}" | xargs -n1 basename | jq -R . | jq -sc .
+          }
+
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            images=$(all)
+          else
+            if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+              base="${{ github.event.pull_request.base.sha }}"
+            else
+              base="${{ github.event.before }}"
+            fi
+
+            if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+              images=$(all)
+            else
+              changed=$(git diff --name-only "${base}" "${{ github.sha }}" -- "${root}/" \
+                        | awk -F/ -v r="${root}" '$1==r {print $2}' | sort -u)
+              if [[ -n "${changed}" ]]; then
+                images=$(printf '%s\n' "${changed}" | jq -R . | jq -sc .)
+              else
+                images='[]'
+              fi
+            fi
+          fi
+
+          echo "images=${images}" >> "${GITHUB_OUTPUT}"
+          echo "Images: ${images}"
         shell: bash
 
-      - name: Detect changed images
-        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
-        uses: dorny/paths-filter@v4.0.3
-        id: filter
-        with:
-          filters: ${{ inputs.filter_file_path }}
-
-      # Resolved once and consumed by both build and merge. Resolving in each
-      # job separately let an upstream release land between them and tag the
-      # image with a version it does not contain.
       - name: Resolve image versions
         id: versions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          images='${{ steps.filter.outputs.changes || steps.all.outputs.images }}'
+          images='${{ steps.detect.outputs.images }}'
           versions='{}'
           for image in $(jq -r '.[]?' <<< "${images:-[]}"); do
-            folder="${{ inputs.images_root_folder }}${image}"
+            folder="${{ inputs.images_root }}/${image}"
             if [[ -f "${folder}/get-version.sh" ]]; then
               version=$(cd "${folder}" && bash get-version.sh)
             else
@@ -70,7 +117,7 @@ jobs:
   build:
     needs:
       - changes
-    if: needs.changes.outputs.images != '' && toJson(fromJson(needs.changes.outputs.images)) != '[]'
+    if: needs.changes.outputs.images != '[]'
     runs-on: ${{ matrix.runners }}
     strategy:
       fail-fast: false
@@ -103,7 +150,7 @@ jobs:
         id: build
         uses: docker/build-push-action@v7
         with:
-          context: ${{ inputs.images_root_folder }}${{ matrix.images }}
+          context: ${{ inputs.images_root }}/${{ matrix.images }}
           build-args: |
             VERSION=${{ fromJSON(needs.changes.outputs.versions)[matrix.images] }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -132,12 +179,10 @@ jobs:
       - changes
     if: >-
       !cancelled() && needs.changes.result == 'success'
-      && needs.changes.outputs.images != '' && toJson(fromJson(needs.changes.outputs.images)) != '[]'
+      && needs.changes.outputs.images != '[]'
       && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
     runs-on: ubuntu-24.04
     strategy:
-      # One image failing to resolve its version must not cancel the manifest
-      # push for every other image in the matrix.
       fail-fast: false
       matrix:
         images: ${{ fromJSON(needs.changes.outputs.images) }}
@@ -166,7 +211,6 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
           if [[ "$VERSION" != "main" ]]; then
-            # Split version into components
             IFS='.' read -ra PARTS <<< "$VERSION"
             echo "major=${PARTS[0]}" >> $GITHUB_OUTPUT
             echo "minor=${PARTS[1]}" >> $GITHUB_OUTPUT
@@ -204,7 +248,9 @@ jobs:
       - build
       - merge
       - changes
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    if: >-
+      needs.changes.outputs.images != '[]'
+      && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
     runs-on: ubuntu-24.04
     strategy:
       matrix:
