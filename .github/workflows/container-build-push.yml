@@ -24,8 +24,15 @@
 # because a matrix over an empty list errors the run. A calling workflow can
 # therefore gate on this one in a repository that has no images yet.
 #
-# One image failing must not cancel its siblings, hence fail-fast: false on the
-# build and merge matrices.
+# One image failing must not cancel its siblings, hence fail-fast: false on every
+# matrix, and merge and cleanup run on !cancelled() rather than on build having
+# succeeded. Registry hygiene in particular must not stop because one image
+# failed to build.
+#
+# Pushing images and pruning old versions need packages: write. A job here can
+# never hold more than the calling workflow is allowed to grant, so a caller in a
+# repository whose default workflow token is read-only must grant it on the
+# calling job, or every run fails before it starts.
 
 name: container-build-push
 
@@ -37,6 +44,9 @@ on:
         required: false
         default: images
         type: string
+
+permissions:
+  contents: read
 
 jobs:
   changes:
@@ -119,6 +129,9 @@ jobs:
       - changes
     if: needs.changes.outputs.images != '[]'
     runs-on: ${{ matrix.runners }}
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -182,6 +195,9 @@ jobs:
       && needs.changes.outputs.images != '[]'
       && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -249,14 +265,17 @@ jobs:
       - merge
       - changes
     if: >-
-      needs.changes.outputs.images != '[]'
+      !cancelled() && needs.changes.result == 'success'
+      && needs.changes.outputs.images != '[]'
       && (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
     strategy:
+      fail-fast: false
       matrix:
         images: ${{ fromJSON(needs.changes.outputs.images) }}
-    permissions:
-      packages: write
     steps:
       - name: Delete old images for ${{ matrix.images }}
         uses: dataaxiom/ghcr-cleanup-action@v1
