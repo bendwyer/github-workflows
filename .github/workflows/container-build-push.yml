@@ -87,8 +87,11 @@ jobs:
             if ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
               images=$(all)
             else
+              # A deleted image's paths still show in the diff; keep only
+              # directories that exist at this commit.
               changed=$(git diff --name-only "${base}" "${{ github.sha }}" -- "${root}/" \
-                        | awk -F/ -v r="${root}" '$1==r {print $2}' | sort -u)
+                        | awk -F/ -v r="${root}" '$1==r {print $2}' | sort -u \
+                        | while read -r name; do if [[ -d "${root}/${name}" ]]; then echo "${name}"; fi; done)
               if [[ -n "${changed}" ]]; then
                 images=$(printf '%s\n' "${changed}" | jq -R . | jq -sc .)
               else
