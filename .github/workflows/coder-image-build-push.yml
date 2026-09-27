@@ -29,7 +29,7 @@ on:
         description: Name of the foundational image; a change to it rebuilds every image.
         required: false
         type: string
-        default: coder-base
+        default: base
 
 permissions:
   contents: read
