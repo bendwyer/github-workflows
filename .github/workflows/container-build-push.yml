@@ -27,7 +27,9 @@
 # One image failing must not cancel its siblings, hence fail-fast: false on every
 # matrix, and merge and cleanup run on !cancelled() rather than on build having
 # succeeded. Registry hygiene in particular must not stop because one image
-# failed to build.
+# failed to build. merge still refuses an image missing any platform, because a
+# partial manifest list under an existing tag breaks every consumer on the
+# missing architecture while the run reports the merge as a success.
 #
 # Pushing images and pruning old versions need packages: write. A job here can
 # never hold more than the calling workflow is allowed to grant, so a caller in a
@@ -215,6 +217,20 @@ jobs:
           path: ${{ runner.temp }}/digests
           pattern: digests-${{ matrix.images }}-*
           merge-multiple: true
+
+      # merge runs even when a build failed, so a missing platform would
+      # otherwise be pushed over the tag as a smaller manifest list that pulls
+      # nowhere on that architecture. Failing here leaves the last good one.
+      - name: Require every platform
+        run: |
+          shopt -s nullglob
+          digests=("${{ runner.temp }}"/digests/*)
+          # One digest per runner in the build matrix.
+          if (( ${#digests[@]} != 2 )); then
+            echo "::error::${{ matrix.images }} has ${#digests[@]} of 2 platform digests; not publishing"
+            exit 1
+          fi
+        shell: bash
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v4.6.0
