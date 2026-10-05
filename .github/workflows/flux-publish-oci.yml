@@ -69,7 +69,7 @@ jobs:
 
       - name: Push OCI artifact
         if: github.event_name != 'pull_request'
-        uses: controlplaneio-fluxcd/distribution/actions/push@746d36fb6147fcb558c0e3e1c8c37d849b56b550 # v2.9.5
+        uses: controlplaneio-fluxcd/distribution/actions/push@7de35f7ca41bcb3242461183779a2e3508c497fa # v2.9.6
         id: push
         with:
           repository: ${{ inputs.oci_repo }}${{ matrix.component != '' && format('/{0}', matrix.component) || '' }}
